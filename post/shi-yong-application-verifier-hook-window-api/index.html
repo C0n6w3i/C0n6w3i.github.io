@@ -1,0 +1,254 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>使用Application verifier hook window API | Gridea</title>
+<link rel="shortcut icon" href="https://c0n6w3i.github.io//favicon.ico?v=1628818360718">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.3.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://c0n6w3i.github.io//styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="使用Application verifier hook window API | Gridea - Atom Feed" href="https://c0n6w3i.github.io//atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="介绍
+Windows 自带的 Applicaion verifier 原本是用来做软件诊断的, 其功能包括检测一些内存错误或者权限问题. 不过这玩意的厉害之处在于用户可以通过编写 dll 来 hook windows 底层API.
+关于如何..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://c0n6w3i.github.io/">
+  <img class="avatar" src="https://c0n6w3i.github.io//images/avatar.png?v=1628818360718" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              使用Application verifier hook window API
+            </h2>
+            <div class="post-info">
+              <span>
+                2021-08-12
+              </span>
+              <span>
+                3 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h2 id="介绍">介绍</h2>
+<p>Windows 自带的 Applicaion verifier 原本是用来做软件诊断的, 其功能包括检测一些内存错误或者权限问题. 不过这玩意的厉害之处在于用户可以通过编写 dll 来 hook windows 底层API.</p>
+<p>关于如何使用 AppVerifier 我这里就不写了, 网上关于 AppVerifier 的教程基本都是介绍如何运行的.<br>
+这里重点谈论下如何编写和加载AVRF</p>
+<h2 id="avrf-流程">AVRF 流程</h2>
+<p>首先介绍下 AppVerifier 的执行流程:<br>
+当一个被标注的程序执行时, AppVerifier 会在程序启动时, 加载 NTDLL 之后开始加载一些 Verification Provider. 这些 Provider 来自一些 dll, 里面包含一些测试项. 加载完之后会执行 这些 DLL 中 VERIFIER_LOADED 里的内容.<br>
+本质上这里执行什么都行, 包括恶意代码. 不过 windows 开发人员也知道这一点, 所以加载自定义的 dll 需要 admin 权限修改注册表.<br>
+AppVerifier 会根据软件在 IFEO 里的 VerifierDLLs 或者 root IFEO 里的 ApplicationVerifierGlobalSettings 来加载 Provider.</p>
+<p>如果在 VERIFIER_LOADED 提供一个 PRTL_VERIFIER_PROVIDER_DESCRIPTOR, AppVerifier 就会根据 PRTL_VERIFIER_PROVIDER_DESCRIPTOR 的设定去 hook 指定的 function.</p>
+<h2 id="编写-dll">编写 DLL</h2>
+<p>和普通 DLL 的区别在于 Provider 使用 VERIFIER_LOADED. 这个 reason 指向 RTL_VERIFIER_PROFIDER_DESCRIPTION. 这就能让 provider 给其他 dll 注册 thunks.<br>
+这里给个简单的例子 hook MessageBoxW, 先把各种 struct 写在头文件里</p>
+<pre><code class="language-c">define DLL_PROCESS_VERIFIER 4
+
+typedef VOID (NTAPI * RTL_VERIFIER_DLL_LOAD_CALLBACK) (PWSTR DllName, PVOID DllBase, SIZE_T DllSize, PVOID Reserved);
+typedef VOID (NTAPI * RTL_VERIFIER_DLL_UNLOAD_CALLBACK) (PWSTR DllName, PVOID DllBase, SIZE_T DllSize, PVOID Reserved);
+typedef VOID (NTAPI * RTL_VERIFIER_NTDLLHEAPFREE_CALLBACK) (PVOID AllocationBase, SIZE_T AllocationSize);
+
+typedef struct _RTL_VERIFIER_THUNK_DESCRIPTOR
+{
+    PCHAR ThunkName;
+    PVOID ThunkOldAddress;
+    PVOID ThunkNewAddress;
+} RTL_VERIFIER_THUNK_DESCRIPTOR, *PRTL_VERIFIER_THUNK_DESCRIPTOR;
+
+typedef struct _RTL_VERIFIER_DLL_DESCRIPTOR
+{
+    PWCHAR DllName;
+    DWORD DllFlags;
+    PVOID DllAddress;
+    PRTL_VERIFIER_THUNK_DESCRIPTOR DllThunks;
+} RTL_VERIFIER_DLL_DESCRIPTOR, *PRTL_VERIFIER_DLL_DESCRIPTOR;
+
+typedef struct _RTL_VERIFIER_PROVIDER_DESCRIPTOR
+{
+    DWORD Length;
+    PRTL_VERIFIER_DLL_DESCRIPTOR ProviderDlls;
+    RTL_VERIFIER_DLL_LOAD_CALLBACK ProviderDllLoadCallback;
+    RTL_VERIFIER_DLL_UNLOAD_CALLBACK ProviderDllUnloadCallback;
+    PWSTR VerifierImage;
+    DWORD VerifierFlags;
+    DWORD VerifierDebug;
+    PVOID RtlpGetStackTraceAddress;
+    PVOID RtlpDebugPageHeapCreate;
+    PVOID RtlpDebugPageHeapDestroy;
+    RTL_VERIFIER_NTDLLHEAPFREE_CALLBACK ProviderNtdllHeapFreeCallback;
+} RTL_VERIFIER_PROVIDER_DESCRIPTOR, *PRTL_VERIFIER_PROVIDER_DESCRIPTOR;
+</code></pre>
+<p>在 RTL_VERIFIER_DLL_DESCRIPTOR 写入要 hook 的 function 所在的 dll. 这里用 user32.dll<br>
+在 dll 对应的 RTL_VERIFIER_THUNK_DESCRIPTOR 里写入要 hook 的 function 的名字. 这里写入 MessageBoxW. AVRF 会在相应 dll 里搜索这个 function 找到的话以后程序运行这个 function 就会先 运行 hook. 这里的 hook function 就是修改 lpText 然后执行原本的MessageBoxW.</p>
+<pre><code class="language-c">typedef int(__stdcall *g_MessageBoxW)(HWND, LPWSTR, LPWSTR, UINT);
+int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType);
+
+static RTL_VERIFIER_THUNK_DESCRIPTOR avrfThunks[] = {{&quot;MessageBoxW&quot;, NULL, (PVOID)(ULONG_PTR)Hook}, { 0 }};
+static RTL_VERIFIER_DLL_DESCRIPTOR avrfDlls[] = {{L&quot;user32.dll&quot;, 0, NULL, avrfThunks}, {NULL, 0, NULL, NULL}};
+static RTL_VERIFIER_PROVIDER_DESCRIPTOR avrfDescriptor = {sizeof(RTL_VERIFIER_PROVIDER_DESCRIPTOR), avrfDlls};
+
+int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType)
+{
+	int res = ((g_MessageBoxW)avrfThunks[0].ThunkOldAddress)(hWnd, L&quot;test&quot;, lpText, uType);
+	return res;
+}
+</code></pre>
+<p>最后在 DLL_PROCESS_VERIFIER 里给 lpReserved 赋值.</p>
+<pre><code class="language-c">BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD dwReason, LPVOID lpReserved)
+{
+	switch (dwReason) 
+    {
+	case DLL_PROCESS_VERIFIER:
+		*(PRTL_VERIFIER_PROVIDER_DESCRIPTOR*)lpReserved = &amp;avrfDescriptor;
+		break;
+	}
+	return TRUE;
+}
+</code></pre>
+<h2 id="总结">总结</h2>
+<p>因为需要admin权限修改注册表所以很难利用, 不过要是能修改注册表的话可以使用此方法修改各种程序.</p>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li><a href="#%E4%BB%8B%E7%BB%8D">介绍</a></li>
+<li><a href="#avrf-%E6%B5%81%E7%A8%8B">AVRF 流程</a></li>
+<li><a href="#%E7%BC%96%E5%86%99-dll">编写 DLL</a></li>
+<li><a href="#%E6%80%BB%E7%BB%93">总结</a></li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://c0n6w3i.github.io/post/cve-2019-20197-nagios-xi-rce/">
+              <h3 class="post-title">
+                CVE-2019-20197 Nagios XI RCE
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://c0n6w3i.github.io//atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

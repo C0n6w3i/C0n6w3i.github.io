@@ -1,0 +1,501 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Alloy Intro | Gridea</title>
+<link rel="shortcut icon" href="https://c0n6w3i.github.io//favicon.ico?v=1628818360718">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.3.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://c0n6w3i.github.io//styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="Alloy Intro | Gridea - Atom Feed" href="https://c0n6w3i.github.io//atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="0x00 前言
+给大家整点软件理论里Formal method的活. 需要证明软件可靠性和安全性之类的时候就可以用这个.
+0x01 什么是Alloy
+Alloy是由MIT开发的软件模型分析工具。主要用将软件逻辑抽象化，然后检查软件逻辑是否符..." />
+    <meta name="keywords" content="formal method" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://c0n6w3i.github.io/">
+  <img class="avatar" src="https://c0n6w3i.github.io//images/avatar.png?v=1628818360718" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              Alloy Intro
+            </h2>
+            <div class="post-info">
+              <span>
+                2019-12-28
+              </span>
+              <span>
+                7 min read
+              </span>
+              
+                <a href="https://c0n6w3i.github.io/tag/bzJZ5igy3/" class="post-tag">
+                  # formal method
+                </a>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <h1 id="0x00-前言">0x00 前言</h1>
+<p>给大家整点软件理论里Formal method的活. 需要证明软件可靠性和安全性之类的时候就可以用这个.</p>
+<h2 id="0x01-什么是alloy">0x01 什么是Alloy</h2>
+<p>Alloy是由MIT开发的软件模型分析工具。主要用将软件逻辑抽象化，然后检查软件逻辑是否符合预期，是<strong>formal method</strong>工具之一。<br>
+Alloy可用于：</p>
+<ol>
+<li>检查软件中各个元素的关系</li>
+<li>检查软件逻辑是否符合预期</li>
+<li>生成反例</li>
+<li>用SAT分析软件行</li>
+</ol>
+<h3 id="alloy下载安装">Alloy下载安装</h3>
+<p>推荐使用VSCode的<a href="https://marketplace.visualstudio.com/items?itemName=ArashSahebolamri.alloy">Alloy插件</a>。不过这个插件使用的是定制化的jar包。如果要使用指定版本的Alloy的话需要到<a href="https://alloytools.org/">官网</a>下载。VSCode也有<a href="https://marketplace.visualstudio.com/items?itemName=DongyuZhao.alloy-vscode">Alloy语法高亮插件</a>。</p>
+<h2 id="0x02-alloy语法">0x02 Alloy语法</h2>
+<h5 id="例子">例子：</h5>
+<p>Alloy的例子可以在<a href="https://github.com/AlloyTools/org.alloytools.alloy/tree/master/org.alloytools.alloy.extra/extra/models">GitHub</a>找到。</p>
+<h5 id="alloy-运算符">Alloy 运算符：</h5>
+<p>Alloy 的运算符和普通编程语言有细微差别</p>
+<h6 id="复合表达">复合表达</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~r</td>
+<td>左右上下翻转</td>
+</tr>
+<tr>
+<td>^r</td>
+<td>传递（不包含自身）</td>
+</tr>
+<tr>
+<td>*r</td>
+<td>传递（包含自身）</td>
+</tr>
+<tr>
+<td>#r</td>
+<td>r里元素的数量</td>
+</tr>
+<tr>
+<td>a.b</td>
+<td>a join b</td>
+</tr>
+<tr>
+<td>b[a]</td>
+<td>a join b</td>
+</tr>
+<tr>
+<td>a -&gt; b</td>
+<td>a 和 b 的笛卡尔集</td>
+</tr>
+<tr>
+<td>a&amp;b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>∩</mo></mrow><annotation encoding="application/x-tex">\cap</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.55556em;vertical-align:0em;"></span><span class="mord">∩</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>a+b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>∪</mo></mrow><annotation encoding="application/x-tex">\cup</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.55556em;vertical-align:0em;"></span><span class="mord">∪</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>a-b</td>
+<td>a <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">\</mi></mrow><annotation encoding="application/x-tex">\backslash</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">\</span></span></span></span> b</td>
+</tr>
+<tr>
+<td>no</td>
+<td>不存在</td>
+</tr>
+<tr>
+<td>a&amp;b</td>
+<td>a 和 b 的交集</td>
+</tr>
+</tbody>
+</table>
+<h6 id="原子公式">原子公式</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>r in s</td>
+<td>r <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mo>⊆</mo></mrow><annotation encoding="application/x-tex">\subseteq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7719400000000001em;vertical-align:-0.13597em;"></span><span class="mrel">⊆</span></span></span></span> s</td>
+</tr>
+<tr>
+<td>r = s</td>
+<td>集合 r 和 s 含有相同的元素</td>
+</tr>
+</tbody>
+</table>
+<h6 id="复合公式">复合公式</h6>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>!f</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">¬</mi><mi>f</mi></mrow><annotation encoding="application/x-tex">\lnot f</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord">¬</span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span></span></span></span></td>
+</tr>
+<tr>
+<td>f &amp;&amp; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>∧</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \land g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">∧</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f || g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>∨</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \lor g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">∨</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f =&gt; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mo>→</mo><mi>g</mi></mrow><annotation encoding="application/x-tex">f \to g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>f &lt;=&gt; g</td>
+<td><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi>f</mi><mtext>  </mtext><mo>⟺</mo><mtext>  </mtext><mi>g</mi></mrow><annotation encoding="application/x-tex">f \iff g</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.8888799999999999em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.10764em;">f</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mrel">⟺</span><span class="mspace" style="margin-right:0.2777777777777778em;"></span><span class="mspace" style="margin-right:0.2777777777777778em;"></span></span><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.19444em;"></span><span class="mord mathdefault" style="margin-right:0.03588em;">g</span></span></span></span></td>
+</tr>
+<tr>
+<td>some r</td>
+<td>r 包含至少一个元素</td>
+</tr>
+<tr>
+<td>one r</td>
+<td>r 只包含一个元素</td>
+</tr>
+<tr>
+<td>lone r</td>
+<td>r 包含最多一个元素</td>
+</tr>
+<tr>
+<td>no r</td>
+<td>r 包含零个元素</td>
+</tr>
+<tr>
+<td>all x: a | f</td>
+<td>集合a里的每一个元素x使f成立</td>
+</tr>
+<tr>
+<td>some x: a | f</td>
+<td>集合a里的至少一个元素x使f成立</td>
+</tr>
+<tr>
+<td>one x: a | f</td>
+<td>集合a里的只有一个元素x使f成立</td>
+</tr>
+<tr>
+<td>lone x: a | f</td>
+<td>集合a里的最多一个元素x使f成立</td>
+</tr>
+<tr>
+<td>no x: a | f</td>
+<td>集合a里的没有一个元素x使f成立</td>
+</tr>
+</tbody>
+</table>
+<h5 id="module">Module：</h5>
+<p>语法：<code>module module_name</code><br>
+Module 会定义当前模型的名。出现在文件第一行。Module可有可无。</p>
+<h5 id="signature">Signature：</h5>
+<p>语法：<code>sig sig_name { field declarations... }</code>或者<code>sig sig_name { field declarations... }{ signature facts... }</code><br>
+Signature 和 Java 的Class有些类似， 有<code>abstract sig</code> 和<code>extend sig</code>。<br>
+<code>sig</code> 例子：</p>
+<pre><code class="language-alloy">  sig FSObject { }
+  sig Dir {
+      contents: set FSObject
+  }
+  sig FileSystem {
+      root: one Dir,
+  }
+</code></pre>
+<p><code>abstract sig</code> 和<code>extend sig</code> 例子：</p>
+<pre><code class="language-alloy">  sig 
+  abstract sig A {
+    r: set A
+  }
+  sig B extends A {
+    //fields
+  }
+  sig C extends A {
+    //fields
+  }
+</code></pre>
+<p>这里 B 和 C 是 A 的子集，因为 B 和 C 都有 r 这个 field。 并且 B 和 C 不相交。</p>
+<h5 id="function">Function ：</h5>
+<p>语法：<code>fun name [arg1, ……] : e1 { e2 }</code><br>
+fun 返回一个值。这里这些变量是可选的。<br>
+e1是返回值的类型和大小<br>
+e2是要返回的值<br>
+例子：</p>
+<pre><code class="language-alloy">fun lookup[m: Map, k: Key]: set Value { k.(m.values) }
+fun test[s : State] : set File {
+   {f: File | f.(s.time) = max[File.(s.time)]}
+}
+</code></pre>
+<h5 id="predicate">Predicate ：</h5>
+<p>语法：<code>pred name [arg1, arg2，……] {formulars}</code><br>
+pred 返回true或者false。这里这些变量是可选的。<br>
+和Prolog类似，如果想要<code>pred</code>执行特定操作的话，可以把输出的变量作为<code>pred</code>的输入。当<code>pred</code>返回true时，作为输出的变量就相当于<code>pred</code>执行完后的输出。<br>
+例子1：</p>
+<pre><code class="language-alloy">pred show(){
+    some root
+    #FSObject &gt; 1
+}
+</code></pre>
+<p>例子2：</p>
+<pre><code class="language-alloy">pred test[s, s' : State] {
+   // your constraints here
+   all f : File | lt[s'.time[f],s.time[f]]
+}
+</code></pre>
+<h5 id="run">Run：</h5>
+<p>语法：<code>name: run {set} for n</code>或者<code>name: run pred_name for n</code><br>
+run 会根据当前模型生成满足特定predicate的实例。<br>
+name可以不写。n为执行的scope，如果不写的话默认为for 3。如果需要特定数量的sig的话，可以写为 和for n but x sig1， y sig2 ……<br>
+例子：</p>
+<pre><code class="language-alloy">runPrep1: run {some State} for 3
+run {} for 10  but exactly 10 Person 
+run show for 3
+</code></pre>
+<h5 id="fact">Fact：</h5>
+<p>语法：<code>fact name {formulars}</code><br>
+fact 将约束模型生成的实例， 生成的所有实例满足特定的predicate。<br>
+name可以不写。<br>
+例子：</p>
+<pre><code class="language-alloy">fact { all d: Dir, o: d.contents | o.parent = d }
+fact test {
+   Floor in FirstFloor.*up
+   all f: TopFloor {no f.up}
+   no f:Floor | f in f.^up
+}
+</code></pre>
+<h5 id="assertions">Assertions</h5>
+<p>语法：<code>assert name { formulas }</code><br>
+assert和pred类似，但是不接受变量，仅用于检查模型是否满足特定predicate。<br>
+例子：</p>
+<pre><code class="language-alloy">assert test_1 {
+   all s : State | test_pred1[s] =&gt; all s' : State | !test_pred2[s, s']
+}
+</code></pre>
+<h5 id="check">Check</h5>
+<p>语法：<code>name: check {formulformulas } for n</code>或者<code>name: run pred_name for n</code><br>
+check 用于检查模型生成的实例中有没有特定Assertion的反例。如果存在反例，alloy会显示不满足Assertions的实例。如果不存在反例，证明Assertion在当前模型中成立。<br>
+例子：</p>
+<pre><code class="language-alloy">check test_1 for 2
+removeAllSame: check {
+  all fs, fs1, fs2: FileSystem, f: File |
+    remove[fs, fs1, f] &amp;&amp; removeAll[fs, fs2, f] =&gt; fs1.live = fs2.live
+} for 5
+</code></pre>
+<h2 id="0x03-import-模型">0x03 import 模型</h2>
+<h5 id="open">Open</h5>
+<p>语法：<code>open somePath/someExample</code><br>
+open 需要在model下面。<br>
+somePath是someExample.als的路径。<br>
+这相当于将someExample.als模型的内容添加到模型中。所以要避免名字冲突。<br>
+例子：</p>
+<pre><code class="language-alloy">   open util/ordering[State]
+</code></pre>
+<h2 id="0x04-helloworld">0x04 HelloWorld</h2>
+<pre><code class="language-alloy">//定义一个电梯门的软件模型
+module Elevator
+//定义一个门
+abstract sig Door {}
+//定义两个门的状态
+one sig Open extends Door {}
+one sig Closed extends Door {}
+//定义电梯移动
+abstract sig Movement {}
+//定义两个移动的状态
+one sig Move extends Movement {}
+one sig None extends Movement {}
+//定义电梯, 内含移动状态和门的状态
+sig Elevator {
+	movement : Movement,
+	door : Door}
+//定义一个约束规则: 电梯门开的时候不移动, 不移动的时候门开着
+fact{
+   all f: Elevator {f.door=Open &lt;=&gt; f.movement=None} 
+}
+//定义一个开关门的函数
+pred switch[f, f': Elevator] { 
+    f.door=Open &lt;=&gt; f'.door=Closed
+    f.door=Closed &lt;=&gt; f'.door=Open
+    f.movement=None &lt;=&gt;f'.movement=Move 
+    f.movement=Move &lt;=&gt;f'.movement=None 
+}
+//定义一个假设: 有的电梯开着门移动
+assert test_2 { some f : Elevator{ f.door=Open &amp;&amp; f.movement=Move} }
+//检查假设
+check test_2
+//运行switch函数, 查看状态
+run {some f, f': Elevator | switch[f, f']} for 3 but exactly 3 Elevator
+//验证模型
+run {}
+</code></pre>
+<p>执行 check 将会输出:<br>
+<code>Counterexample found. Assertion is invalid.</code><br>
+执行第一个 run 将会输出图片, 显示电梯的三个状态:<br>
+执行第二个 run 会显示电梯和各种状态的关系:</p>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li><a href="#0x00-%E5%89%8D%E8%A8%80">0x00 前言</a>
+<ul>
+<li><a href="#0x01-%E4%BB%80%E4%B9%88%E6%98%AFalloy">0x01 什么是Alloy</a>
+<ul>
+<li><a href="#alloy%E4%B8%8B%E8%BD%BD%E5%AE%89%E8%A3%85">Alloy下载安装</a></li>
+</ul>
+</li>
+<li><a href="#0x02-alloy%E8%AF%AD%E6%B3%95">0x02 Alloy语法</a><br>
+*<br>
+*<br>
+* <a href="#%E4%BE%8B%E5%AD%90">例子：</a><br>
+* <a href="#alloy-%E8%BF%90%E7%AE%97%E7%AC%A6">Alloy 运算符：</a><br>
+* <a href="#%E5%A4%8D%E5%90%88%E8%A1%A8%E8%BE%BE">复合表达</a><br>
+* <a href="#%E5%8E%9F%E5%AD%90%E5%85%AC%E5%BC%8F">原子公式</a><br>
+* <a href="#%E5%A4%8D%E5%90%88%E5%85%AC%E5%BC%8F">复合公式</a><br>
+* <a href="#module">Module：</a><br>
+* <a href="#signature">Signature：</a><br>
+* <a href="#function">Function ：</a><br>
+* <a href="#predicate">Predicate ：</a><br>
+* <a href="#run">Run：</a><br>
+* <a href="#fact">Fact：</a><br>
+* <a href="#assertions">Assertions</a><br>
+* <a href="#check">Check</a></li>
+<li><a href="#0x03-import-%E6%A8%A1%E5%9E%8B">0x03 import 模型</a><br>
+*<br>
+*<br>
+* <a href="#open">Open</a></li>
+<li><a href="#0x04-helloworld">0x04 HelloWorld</a></li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://c0n6w3i.github.io//atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>

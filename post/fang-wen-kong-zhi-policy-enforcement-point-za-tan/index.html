@@ -1,0 +1,241 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>访问控制 Policy Enforcement Point 杂谈 | Gridea</title>
+<link rel="shortcut icon" href="https://c0n6w3i.github.io//favicon.ico?v=1628818360718">
+<link href="https://cdn.jsdelivr.net/npm/remixicon@2.3.0/fonts/remixicon.css" rel="stylesheet">
+<link rel="stylesheet" href="https://c0n6w3i.github.io//styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="访问控制 Policy Enforcement Point 杂谈 | Gridea - Atom Feed" href="https://c0n6w3i.github.io//atom.xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
+
+
+
+    <meta name="description" content="本科毕业论文中的一部分涉及到 Policy Enforcement Point。因为这块资料找起来特别麻烦, 就记录一下避免遗忘。
+访问控制里的 Policy Enforcement Point
+一般会认为 Policy Enforceme..." />
+    <meta name="keywords" content="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.10.0/katex.min.css">
+    <script src="https://cdn.bootcss.com/highlight.js/9.12.0/highlight.min.js"></script>
+  </head>
+  <body>
+    <div class="main">
+      <div class="main-content">
+        <div class="site-header">
+  <a href="https://c0n6w3i.github.io/">
+  <img class="avatar" src="https://c0n6w3i.github.io//images/avatar.png?v=1628818360718" alt="">
+  </a>
+  <h1 class="site-title">
+    Gridea
+  </h1>
+  <p class="site-description">
+    温故而知新
+  </p>
+  <div class="menu-container">
+    
+      
+        <a href="/" class="menu">
+          首页
+        </a>
+      
+    
+      
+        <a href="/archives" class="menu">
+          归档
+        </a>
+      
+    
+      
+        <a href="/tags" class="menu">
+          标签
+        </a>
+      
+    
+      
+        <a href="/post/about" class="menu">
+          关于
+        </a>
+      
+    
+  </div>
+  <div class="social-container">
+    
+      
+    
+      
+    
+      
+    
+      
+    
+      
+    
+  </div>
+</div>
+
+        <div class="post-detail">
+          <article class="post">
+            <h2 class="post-title">
+              访问控制 Policy Enforcement Point 杂谈
+            </h2>
+            <div class="post-info">
+              <span>
+                2020-05-18
+              </span>
+              <span>
+                3 min read
+              </span>
+              
+            </div>
+            
+            <div class="post-content-wrapper">
+              <div class="post-content">
+                <p>本科毕业论文中的一部分涉及到 Policy Enforcement Point。因为这块资料找起来特别麻烦, 就记录一下避免遗忘。</p>
+<h2 id="访问控制里的-policy-enforcement-point">访问控制里的 Policy Enforcement Point</h2>
+<p>一般会认为 Policy Enforcement Point(PEP) 是基于属性的访问控制(ABAC)里的一个子系统，毕竟ABAC有时候也被称作PBAC(Policy-based Access Control)。不过实际上不管什么访问控制都会有类似这个系统。PEP 主要是负责实施访问控制的结果, 所以有时也被称为Access Control Enforcement Function。</p>
+<h2 id="policy-enforcement-point-实现方式">Policy Enforcement Point 实现方式</h2>
+<p>一般在细粒度访问控制模型里,访问控制的结果通常分三种：<br>
+- 允许: 用户可以获得数据<br>
+- 允许 + 特定条件: 用户可以获得部分数据, 这部分数据要满足特定条件<br>
+- 拒绝: 用户不能获得数据<br>
+而针对细粒度访问控制，并且基本上只有 <span class="katex"><span class="katex-mathml"><math><semantics><mrow><mi mathvariant="normal">允</mi><mi mathvariant="normal">许</mi><mo>+</mo><mi mathvariant="normal">特</mi><mi mathvariant="normal">定</mi><mi mathvariant="normal">条</mi><mi mathvariant="normal">件</mi></mrow><annotation encoding="application/x-tex">允许 + 特定条件</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.66666em;vertical-align:-0.08333em;"></span><span class="mord cjk_fallback">允</span><span class="mord cjk_fallback">许</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222222222222222em;"></span></span><span class="base"><span class="strut" style="height:0em;vertical-align:0em;"></span><span class="mord cjk_fallback">特</span><span class="mord cjk_fallback">定</span><span class="mord cjk_fallback">条</span><span class="mord cjk_fallback">件</span></span></span></span> 这种情况下的PEP一般会分两种，Post-Processing 和 Pre-Processing。</p>
+<h3 id="post-processing">Post-Processing</h3>
+<p>Post-Processing 主要是在数据返回给用户前改变数据，根据访问控制的结果去掉一些数据。一般实现这种需要目标服务有语句执行完之后的hook，或者在目标服务外面套一层。好像大部分数据库的访问控制系统都是采取的这种方式。</p>
+<h3 id="pre-processing">Pre-Processing</h3>
+<p>Pre-Processing 和 Post-Processing 相反， 主要是在语句运行前对语句做处理，从而达到过滤数据的目的。这种方法不需要目标服务支持， 并且可以适配多种服务。</p>
+<p>不过直接修改类似SQL语句很容易出错，并且也会破环语句本身的意思，所以Pre-Processing 还可以被细分成Truman Model 和Non-Truman Model。</p>
+<h3 id="query-modification">Query modification</h3>
+<p>Query modification 就是根据访问控制规则修改语句。Truman Model 全称是Truman's World Model。 它主要是给用户提供一个仅包含可访问数据的视图（view）然后用户通过视图来查询数据。Oracle 的 Virtual Private Database（VPD）就是一种典型的 Truman Model。</p>
+<p>这种方法实际上是有缺陷的， 首先设计视图要花很长时间。并且用户在运行一些带有聚合类函数的语句时，执行结果可能会误导用户。举个例子：<br>
+假设有一个表A:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>成绩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>10</td>
+</tr>
+<tr>
+<td>1</td>
+<td>10</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>并且规定用户只能查询自己ID对应的成绩.<br>
+当用户 0 运行查询语句 <code>SELECT * FROM A</code> 时, Truman model 会仅返回:</p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>成绩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>10</td>
+</tr>
+</tbody>
+</table>
+<p>然而 当用户 0 运行查询语句 <code>SELECT AVG(成绩)FROM A</code> 时, Truman model 会返回 10, 因为根据访问控制规则, 用户 0 的视图中仅存在 1 条数据. 但是这个结果是错误的, 并且会让用户 0 觉得平均成绩就是 10.<br>
+总而言之, Truman model 在语句包含聚合类函数的时候会返回会误导人的结果. 为了解决这个问题, XXX 引入了 Non-Truman model 也就是 Query validation 的一种.</p>
+<h3 id="query-validation">Query validation</h3>
+<p>未完待续...</p>
+
+              </div>
+              <div class="toc-container">
+                <ul class="markdownIt-TOC">
+<li>
+<ul>
+<li><a href="#%E8%AE%BF%E9%97%AE%E6%8E%A7%E5%88%B6%E9%87%8C%E7%9A%84-policy-enforcement-point">访问控制里的 Policy Enforcement Point</a></li>
+<li><a href="#policy-enforcement-point-%E5%AE%9E%E7%8E%B0%E6%96%B9%E5%BC%8F">Policy Enforcement Point 实现方式</a>
+<ul>
+<li><a href="#post-processing">Post-Processing</a></li>
+<li><a href="#pre-processing">Pre-Processing</a></li>
+<li><a href="#query-modification">Query modification</a></li>
+<li><a href="#query-validation">Query validation</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+              </div>
+            </div>
+          </article>
+        </div>
+
+        
+          <div class="next-post">
+            <div class="next">下一篇</div>
+            <a href="https://c0n6w3i.github.io/post/alloy-intro/">
+              <h3 class="post-title">
+                Alloy Intro
+              </h3>
+            </a>
+          </div>
+        
+
+        
+
+        <div class="site-footer">
+  Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
+  <a class="rss" href="https://c0n6w3i.github.io//atom.xml" target="_blank">
+    <i class="ri-rss-line"></i> RSS
+  </a>
+</div>
+
+      </div>
+    </div>
+
+    <script>
+      hljs.initHighlightingOnLoad()
+
+      let mainNavLinks = document.querySelectorAll(".markdownIt-TOC a");
+
+      // This should probably be throttled.
+      // Especially because it triggers during smooth scrolling.
+      // https://lodash.com/docs/4.17.10#throttle
+      // You could do like...
+      // window.addEventListener("scroll", () => {
+      //    _.throttle(doThatStuff, 100);
+      // });
+      // Only not doing it here to keep this Pen dependency-free.
+
+      window.addEventListener("scroll", event => {
+        let fromTop = window.scrollY;
+
+        mainNavLinks.forEach((link, index) => {
+          let section = document.getElementById(decodeURI(link.hash).substring(1));
+          let nextSection = null
+          if (mainNavLinks[index + 1]) {
+            nextSection = document.getElementById(decodeURI(mainNavLinks[index + 1].hash).substring(1));
+          }
+          if (section.offsetTop <= fromTop) {
+            if (nextSection) {
+              if (nextSection.offsetTop > fromTop) {
+                link.classList.add("current");
+              } else {
+                link.classList.remove("current");    
+              }
+            } else {
+              link.classList.add("current");
+            }
+          } else {
+            link.classList.remove("current");
+          }
+        });
+      });
+
+    </script>
+  </body>
+</html>
