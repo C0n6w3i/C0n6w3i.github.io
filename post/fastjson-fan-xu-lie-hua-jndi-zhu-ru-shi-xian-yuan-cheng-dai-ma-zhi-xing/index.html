@@ -3,10 +3,10 @@
     <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fastjson 反序列化 + JNDI 注入 实现远程代码执行 | Gridea</title>
-<link rel="shortcut icon" href="https://c0n6w3i.github.io//favicon.ico?v=1628818360718">
+<link rel="shortcut icon" href="https://h31u0.github.io//favicon.ico?v=1628821229532">
 <link href="https://cdn.jsdelivr.net/npm/remixicon@2.3.0/fonts/remixicon.css" rel="stylesheet">
-<link rel="stylesheet" href="https://c0n6w3i.github.io//styles/main.css">
-<link rel="alternate" type="application/atom+xml" title="Fastjson 反序列化 + JNDI 注入 实现远程代码执行 | Gridea - Atom Feed" href="https://c0n6w3i.github.io//atom.xml">
+<link rel="stylesheet" href="https://h31u0.github.io//styles/main.css">
+<link rel="alternate" type="application/atom+xml" title="Fastjson 反序列化 + JNDI 注入 实现远程代码执行 | Gridea - Atom Feed" href="https://h31u0.github.io//atom.xml">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Droid+Serif:400,700">
 
 
@@ -23,8 +23,8 @@ Fastjson 是一个 Java 编写的 JSON 库, 可以用来将 String 转成 Java O
     <div class="main">
       <div class="main-content">
         <div class="site-header">
-  <a href="https://c0n6w3i.github.io/">
-  <img class="avatar" src="https://c0n6w3i.github.io//images/avatar.png?v=1628818360718" alt="">
+  <a href="https://h31u0.github.io/">
+  <img class="avatar" src="https://h31u0.github.io//images/avatar.png?v=1628821229532" alt="">
   </a>
   <h1 class="site-title">
     Gridea
@@ -202,7 +202,7 @@ Fastjson 是一个 Java 编写的 JSON 库, 可以用来将 String 转成 Java O
 <p>Fastjson &lt;= 1.2.66</p>
 <h2 id="0x04-环境搭建">0x04 环境搭建</h2>
 <p>目录结构：<br>
-<img src="https://c0n6w3i.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
+<img src="https://h31u0.github.io//post-images/1591627649611.png" alt="" loading="lazy"></p>
 <p>pom 文件:</p>
 <pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 
@@ -449,7 +449,7 @@ public class App {
 </code></pre>
 <p>先运行 server 代码, 再运行 victim 代码<br>
 运行结果:</p>
-<figure data-type="image" tabindex="1"><img src="https://c0n6w3i.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
+<figure data-type="image" tabindex="1"><img src="https://h31u0.github.io//post-images/1591627692333.jpg" alt="" loading="lazy"></figure>
 <h2 id="0x06-修复方式">0x06 修复方式</h2>
 <p>AutoType 默认关闭, 不过要用到的话需要确保 AutoTypeSupport 设置正确, 删除 <code>ParserConfig.getGlobalInstance().setAutoTypeSupport(true);</code></p>
 <h2 id="参考链接">参考链接：</h2>
@@ -480,7 +480,7 @@ public class App {
         
           <div class="next-post">
             <div class="next">下一篇</div>
-            <a href="https://c0n6w3i.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
+            <a href="https://h31u0.github.io/post/fang-wen-kong-zhi-policy-enforcement-point-za-tan/">
               <h3 class="post-title">
                 访问控制 Policy Enforcement Point 杂谈
               </h3>
@@ -492,7 +492,7 @@ public class App {
 
         <div class="site-footer">
   Powered by <a href="https://github.com/getgridea/gridea" target="_blank">Gridea</a>
-  <a class="rss" href="https://c0n6w3i.github.io//atom.xml" target="_blank">
+  <a class="rss" href="https://h31u0.github.io//atom.xml" target="_blank">
     <i class="ri-rss-line"></i> RSS
   </a>
 </div>
